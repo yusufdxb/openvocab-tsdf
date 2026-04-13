@@ -13,21 +13,23 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 | 0. Audit + architecture + scaffold | ✅ done | `docs/architecture.md`, `docs/decisions.md`, `AGENTS.md`, env via `uv` |
 | 1. RGB-D ingestion + reference TSDF | ✅ done | Replica loader, PyTorch dense backend (~1.5 kFPS @ 320×240), marching-cubes mesh |
 | 1b. Custom GPU TSDF kernel | ✅ done | **Triton** (sm_120-compatible), 4423 FPS @ 320×240, 25 MB VRAM, parity-tested |
-| 2. OpenCLIP features + 3D aggregation | ✅ done (global) | ViT-B/16 per-frame → per-voxel weighted mean. End-to-end grounding works on a synthetic multi-object scene. |
-| 2b. Patch / mask features | ⏸ next | Needed to tighten spatial localization; spec'd in `docs/decisions.md` |
-| 3. Query engine + eval harness | ✅ done | Cosine-sim, connected-component cluster, YAML-driven eval producing JSON |
+| 2. OpenCLIP features + 3D aggregation | ✅ done | ViT-B/16 per-frame global embedding → per-voxel weighted mean. End-to-end grounding pipeline works. |
+| 2b. Patch / dense features | ✅ done | ViT patch tokens with the **MaskCLIP** last-block-attn-bypass, lifted into 3D with per-voxel patch lookup and a near-surface feature gate. |
+| 3. Query engine + eval harness | ✅ done | Cosine-sim, connected-component cluster, YAML-driven eval producing JSON. Surface-only filter on queries. |
 | 4. Optimization | 🟡 partial | Triton already ≥ 100× the 30-FPS fuse budget; TensorRT for CLIP is next |
-| 5. ROS 2 interface | 🟡 scaffolded | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` + launch file; colcon build pending |
-| 6. Polish + figures | 🟡 partial | README, decisions, synthetic demo, first eval baseline logged |
+| 5. ROS 2 interface | ✅ **built & smoke-tested** | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` colcon-built, service `/openvocab/ground` returns ranked targets over DDS. |
+| 6. Polish + figures | 🟡 partial | README, decisions, synthetic demo, first eval baseline logged, heatmap PLY exporter done. Publishable real-data figures pending dataset download. |
 
 ### Current numbers on a synthetic scene (RTX 5070, 12 GB)
 
 - TSDF fuse, Triton backend: **4423 FPS**, 25 MB peak VRAM
 - TSDF fuse, reference backend: 1486 FPS, 68 MB peak VRAM
 - End-to-end grounding query (text encode + voxel scan + cluster): **~50 ms**
-- First honest grounding baseline (global features, 3-case synthetic eval): hit@1 = 0 %, hit@5 = 33 %, mean top-1 centroid L2 = 0.61 m
+- ROS 2 service `/openvocab/ground` — DDS roundtrip returns ranked targets in well under a second
+- First synthetic-scene grounding baseline (global features): hit@1 = 0 %, hit@5 = 33 %, mean top-1 L2 = 0.61 m — honest ceiling for global features
+- Patch-feature mode runs end-to-end and produces per-query heatmaps; precise localization gating moves to real-data eval (synthetic rendering is out of distribution for CLIP)
 
-Real-dataset numbers (ScanNet / Replica) and the Phase 2b patch-feature numbers land next.
+Real-dataset numbers (Replica / ScanNet) land once the dataset download completes — see `scripts/download_datasets.sh`.
 
 See [`docs/architecture.md`](docs/architecture.md) for the full plan, performance targets, and what is explicitly cut. See [`docs/decisions.md`](docs/decisions.md) for the architectural-decision log. See [`AGENTS.md`](AGENTS.md) for the rules that govern agent work in this repository.
 
@@ -67,10 +69,25 @@ openvocab-tsdf fuse --config configs/replica_room0.yaml --output outputs/mesh.pl
 openvocab-tsdf encode --config configs/replica_room0.yaml
 
 # 6. [phase 3] text query
-openvocab-tsdf ground --config configs/replica_room0.yaml --query "plant on the desk"
+openvocab-tsdf ground --map outputs/map.npz --query "plant on the desk" --config configs/replica_room0.yaml
+
+# 7. [phase 6] export per-query heatmap PLYs alongside the mesh
+python scripts/export_heatmaps.py \
+    --map outputs/map.npz \
+    --query "a red chair" --query "the couch" \
+    --out-dir outputs/heatmaps
 ```
 
-Subcommands past `info` return a non-zero exit until their phase lands.
+Or try the fully self-contained demo (no dataset required):
+
+```bash
+python scripts/demo_synthetic.py
+python scripts/export_heatmaps.py --map outputs/demo_map.npz \
+    --query "a red ball" --query "a blue bar" --query "green grass floor" \
+    --out-dir outputs/heatmaps
+```
+
+The ROS 2 node exposing `/openvocab/ground` as a service lives at `ros2_ws/` — see its dedicated README.
 
 ## Repository layout
 
