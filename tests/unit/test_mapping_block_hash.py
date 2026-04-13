@@ -54,9 +54,16 @@ def test_block_hash_matches_reference_geometry():
     weight_bh = weight_bh[:Nx, :Ny, :Nz]
     color_bh = color_bh[:Nx, :Ny, :Nz]
 
-    assert torch.equal(ref.tsdf, tsdf_bh), "tsdf mismatch"
+    # FP agreement to within ~1e-5: the frustum-culled integrate evaluates
+    # voxels in a different order than the reference, so we don't guarantee
+    # bit-for-bit equality (would require identical reductions).
+    assert torch.allclose(
+        ref.tsdf, tsdf_bh, atol=1e-5
+    ), f"tsdf max diff {(ref.tsdf - tsdf_bh).abs().max().item()}"
     assert torch.equal(ref.weight, weight_bh), "weight mismatch"
-    assert torch.equal(ref.color, color_bh), "color mismatch"
+    assert torch.allclose(
+        ref.color, color_bh, atol=1e-3
+    ), f"color max diff {(ref.color - color_bh).abs().max().item()}"
 
 
 @pytest.mark.gpu

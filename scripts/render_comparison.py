@@ -27,7 +27,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 
-
 # Re-use PLY loader from render_figures.py
 from render_figures import _parse_ply  # type: ignore[import-not-found]
 
@@ -135,7 +134,9 @@ def main() -> None:
         gt_max = gt[1] if gt else None
 
         fig, axes = plt.subplots(2, 3, figsize=(13, 8.3))
-        fig.suptitle(f"query: {q!r}   —   {args.baseline_label}  vs  {args.treatment_label}", fontsize=12)
+        fig.suptitle(
+            f"query: {q!r}   —   {args.baseline_label}  vs  {args.treatment_label}", fontsize=12
+        )
         for col, (name, proj) in enumerate(
             [("xy — top-down", "xy"), ("xz — front", "xz"), ("yz — side", "yz")]
         ):

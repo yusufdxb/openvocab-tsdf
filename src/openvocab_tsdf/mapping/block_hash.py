@@ -91,13 +91,31 @@ class BlockHashTSDF:
             self._color_pool = None
         self._num_blocks = 0
 
-        # Cached voxel-center world coords for iteration (flat (M, 3))
-        ix = torch.arange(self.dims[0], device=self.device, dtype=torch.float32)
-        iy = torch.arange(self.dims[1], device=self.device, dtype=torch.float32)
-        iz = torch.arange(self.dims[2], device=self.device, dtype=torch.float32)
-        gx, gy, gz = torch.meshgrid(ix, iy, iz, indexing="ij")
-        centers = torch.stack([gx, gy, gz], dim=-1) + 0.5
-        self._voxel_world = self.origin + centers * cfg.voxel_size_m  # (Nx,Ny,Nz,3)
+        # Cached BLOCK-center world coords (cheap; 1/512 of full-voxel storage).
+        # Used for frustum culling at integrate time.
+        ibx = torch.arange(Nbx, device=self.device, dtype=torch.float32)
+        iby = torch.arange(Nby, device=self.device, dtype=torch.float32)
+        ibz = torch.arange(Nbz, device=self.device, dtype=torch.float32)
+        gbx, gby, gbz = torch.meshgrid(ibx, iby, ibz, indexing="ij")
+        block_center_idx = torch.stack([gbx, gby, gbz], dim=-1)  # (Nbx, Nby, Nbz, 3)
+        self._block_world_center = (
+            self.origin + (block_center_idx + 0.5) * BLOCK * cfg.voxel_size_m
+        )  # (Nbx, Nby, Nbz, 3)
+        # block half-diagonal for frustum inclusion test
+        self._block_half_diag = (0.5 * BLOCK * cfg.voxel_size_m) * (3**0.5)
+
+        # Cached in-block local voxel center offsets (relative to block origin).
+        lx = torch.arange(BLOCK, device=self.device, dtype=torch.float32)
+        ly = torch.arange(BLOCK, device=self.device, dtype=torch.float32)
+        lz = torch.arange(BLOCK, device=self.device, dtype=torch.float32)
+        glx, gly, glz = torch.meshgrid(lx, ly, lz, indexing="ij")
+        local_off = torch.stack([glx, gly, glz], dim=-1) + 0.5
+        self._local_voxel_offset = (local_off * cfg.voxel_size_m).reshape(BLOCK3, 3)
+        # also cache the local-flat index for each local (i, j, k)
+        lfx, lfy, lfz = torch.meshgrid(lx, ly, lz, indexing="ij")
+        self._local_flat_grid = (
+            (lfx * BLOCK * BLOCK + lfy * BLOCK + lfz).to(torch.int64).reshape(BLOCK3)
+        )
 
     # --------------------------------------------------------------- helpers
     @property
@@ -152,6 +170,18 @@ class BlockHashTSDF:
     # -------------------------------------------------------------- integrate
     @torch.no_grad()
     def integrate(self, frame: RGBDFrame) -> None:
+        """Frustum-culled integrate.
+
+        Stage 1: cheap per-BLOCK cull against the camera frustum (block
+        centers transformed to camera space, conservative radius test on z
+        and projected bounds). Skips the expensive 125 M-voxel projection
+        that the naive path does at multi-meter scales.
+
+        Stage 2: on the surviving blocks (typically 100–1000 out of millions
+        for a typical indoor frame), expand their 8³ voxels and do the
+        standard project/sdf/update. The per-voxel workload is now bounded
+        by the frustum, not by the volume.
+        """
         cfg = self.cfg
         T_wc = torch.as_tensor(frame.T_wc, dtype=torch.float32, device=self.device)
         T_cw = torch.linalg.inv(T_wc)
@@ -165,45 +195,74 @@ class BlockHashTSDF:
             else None
         )
 
-        pts_w = self._voxel_world.reshape(-1, 3)  # (M, 3)
-        pts_c = (T_cw[:3, :3] @ pts_w.T).T + T_cw[:3, 3]
-        z = pts_c[:, 2]
-        valid_z = z > 0
-        u = (K[0, 0] * pts_c[:, 0] / (z + 1e-8) + K[0, 2]).round().long()
-        v = (K[1, 1] * pts_c[:, 1] / (z + 1e-8) + K[1, 2]).round().long()
+        Nbx, Nby, Nbz = self.block_dims
+
+        # Stage 1: block-level frustum cull.
+        bw = self._block_world_center.view(-1, 3)  # (Nb_total, 3)
+        bc = (T_cw[:3, :3] @ bw.T).T + T_cw[:3, 3]  # (Nb_total, 3) in camera frame
+        z = bc[:, 2]
+        r = self._block_half_diag  # conservative inclusion radius
+        # keep blocks whose camera-z is within [0 - r, depth_trunc + r]
+        trunc = cfg.truncation_distance_m
+        # we'll also need an upper depth bound — use the frame's max depth or a cap
+        max_depth = float(depth.max().item()) if depth.numel() else 6.0
+        z_ok = (z + r > 0) & (z - r < max_depth + trunc)
+        # projected center ± inclusion radius within image bounds
+        u_c = K[0, 0] * bc[:, 0] / (z.abs().clamp_min(1e-3)) + K[0, 2]
+        v_c = K[1, 1] * bc[:, 1] / (z.abs().clamp_min(1e-3)) + K[1, 2]
+        proj_margin_u = K[0, 0] * r / (z.abs().clamp_min(1e-3))
+        proj_margin_v = K[1, 1] * r / (z.abs().clamp_min(1e-3))
+        u_ok = (u_c + proj_margin_u > 0) & (u_c - proj_margin_u < W)
+        v_ok = (v_c + proj_margin_v > 0) & (v_c - proj_margin_v < H)
+        block_keep = z_ok & u_ok & v_ok  # (Nb_total,)
+        surviving = block_keep.nonzero(as_tuple=False).squeeze(-1)  # flat block idx
+        if surviving.numel() == 0:
+            return
+
+        # Stage 2: expand surviving blocks into their 8³ voxels and run the
+        # standard integrate math on those only.
+        n_blocks = int(surviving.numel())
+        # block coords in world
+        b_ix = surviving // (Nby * Nbz)
+        tmp = surviving % (Nby * Nbz)
+        b_iy = tmp // Nbz
+        b_iz = tmp % Nbz
+        block_origin_world = (
+            self.origin
+            + torch.stack([b_ix, b_iy, b_iz], dim=-1).to(torch.float32) * BLOCK * cfg.voxel_size_m
+        )  # (n_blocks, 3)
+
+        # expand to per-voxel world coords: (n_blocks, 512, 3)
+        pts_w = block_origin_world.unsqueeze(1) + self._local_voxel_offset.unsqueeze(0)
+        pts_w_flat = pts_w.reshape(-1, 3)  # (n_blocks*512, 3)
+
+        pts_c = (T_cw[:3, :3] @ pts_w_flat.T).T + T_cw[:3, 3]
+        z_v = pts_c[:, 2]
+        valid_z = z_v > 0
+        u = (K[0, 0] * pts_c[:, 0] / (z_v + 1e-8) + K[0, 2]).round().long()
+        v = (K[1, 1] * pts_c[:, 1] / (z_v + 1e-8) + K[1, 2]).round().long()
         in_img = (u >= 0) & (u < W) & (v >= 0) & (v < H)
         valid = valid_z & in_img
         u_s = u.clamp(0, W - 1)
         v_s = v.clamp(0, H - 1)
         d_sample = depth[v_s, u_s]
         valid = valid & (d_sample > 0)
-        sdf = d_sample - z
-        valid = valid & (sdf >= -cfg.truncation_distance_m)
-        tsdf_new = (sdf / cfg.truncation_distance_m).clamp(-1.0, 1.0)
+        sdf = d_sample - z_v
+        valid = valid & (sdf >= -trunc)
+        tsdf_new = (sdf / trunc).clamp(-1.0, 1.0)
 
         idx_flat = torch.nonzero(valid, as_tuple=False).squeeze(-1)
         if idx_flat.numel() == 0:
             return
 
-        Nx, Ny, Nz = self.dims
-        # voxel index (i, j, k) from flat index
-        i_vox = idx_flat // (Ny * Nz)
-        tmp = idx_flat % (Ny * Nz)
-        j_vox = tmp // Nz
-        k_vox = tmp % Nz
-        # block coords + local-in-block coords
-        bx = (i_vox // BLOCK).to(torch.int64)
-        by = (j_vox // BLOCK).to(torch.int64)
-        bz = (k_vox // BLOCK).to(torch.int64)
-        li = (i_vox % BLOCK).to(torch.int64)
-        lj = (j_vox % BLOCK).to(torch.int64)
-        lk = (k_vox % BLOCK).to(torch.int64)
-        local_flat = li * BLOCK * BLOCK + lj * BLOCK + lk
+        # Per-voxel: which surviving block it belongs to, and its local-flat
+        # index within that block. Cached arrays take care of local indices.
+        which_block = idx_flat // BLOCK3
+        which_local = idx_flat % BLOCK3
+        surviving_block_flat = surviving[which_block]  # global-flat block id
 
-        # Allocate missing blocks. Stay on GPU — use a scan over unique blocks.
-        Nbx, Nby, Nbz = self.block_dims
-        block_flat = bx * (Nby * Nbz) + by * Nbz + bz
-        unique_blocks, inverse = torch.unique(block_flat, return_inverse=True)
+        # Allocate slots for newly-seen blocks among the surviving set
+        unique_blocks, inverse = torch.unique(surviving_block_flat, return_inverse=True)
         ub_slots = self._block_slot.view(-1)[unique_blocks]
         need_alloc = ub_slots < 0
         n_new = int(need_alloc.sum().item())
@@ -215,15 +274,13 @@ class BlockHashTSDF:
                 device=self.device,
                 dtype=torch.int32,
             )
-            # write slots for newly-allocated blocks
             self._block_slot.view(-1).index_copy_(0, unique_blocks[need_alloc], new_ids)
             self._num_blocks += n_new
             ub_slots = self._block_slot.view(-1)[unique_blocks]
 
-        # Per-voxel slot via the inverse map
-        voxel_slot = ub_slots[inverse].to(torch.int64)  # (Nv,)
+        voxel_slot = ub_slots[inverse].to(torch.int64)
+        local_flat = which_local  # already int64
 
-        # Update via merged gather-compute-scatter on the block pools
         w_old = self._weight_pool[voxel_slot, local_flat]
         t_old = self._tsdf_pool[voxel_slot, local_flat]
         t_samp = tsdf_new[idx_flat]

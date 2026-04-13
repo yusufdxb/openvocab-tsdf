@@ -1,0 +1,31 @@
+{
+  "name": "block_hash_scale",
+  "timestamp": "2026-04-13T16:39:52+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "side_m": 30.0,
+    "voxel_m": 0.04,
+    "frames": 24
+  },
+  "runs": [
+    {
+      "backend": "dense_reference",
+      "error": "OOM",
+      "detail": "CUDA out of memory. Tried to allocate 4.71 GiB. GPU 0 has a total capacity of 11.48 GiB of which 2.85 GiB is free. Including non-PyTorch memory, this process has 8.04 GiB memory in use. Of the allocat"
+    },
+    {
+      "backend": "block_hash",
+      "total_blocks": 830584,
+      "allocated_blocks": 836,
+      "geom_bytes": 8560640,
+      "geom_mb": 8.2,
+      "peak_vram_mb": 201.5,
+      "integrate_fps": 162.65328716332957,
+      "sparsity_ratio": 0.0010065207131367809
+    }
+  ]
+}
