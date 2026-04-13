@@ -1,0 +1,1 @@
+/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_msgs/rosidl_typesupport_introspection_c/openvocab_tsdf_msgs/srv/detail/ground_text__rosidl_typesupport_introspection_c.h

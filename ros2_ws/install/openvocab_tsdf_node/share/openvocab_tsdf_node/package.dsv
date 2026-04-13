@@ -1,0 +1,9 @@
+source;share/openvocab_tsdf_node/hook/pythonpath.ps1
+source;share/openvocab_tsdf_node/hook/pythonpath.dsv
+source;share/openvocab_tsdf_node/hook/pythonpath.sh
+source;share/openvocab_tsdf_node/hook/ament_prefix_path.ps1
+source;share/openvocab_tsdf_node/hook/ament_prefix_path.dsv
+source;share/openvocab_tsdf_node/hook/ament_prefix_path.sh
+source;../../build/openvocab_tsdf_node/share/openvocab_tsdf_node/hook/pythonpath_develop.ps1
+source;../../build/openvocab_tsdf_node/share/openvocab_tsdf_node/hook/pythonpath_develop.dsv
+source;../../build/openvocab_tsdf_node/share/openvocab_tsdf_node/hook/pythonpath_develop.sh

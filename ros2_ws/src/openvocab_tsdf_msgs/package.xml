@@ -4,7 +4,7 @@
   <name>openvocab_tsdf_msgs</name>
   <version>0.1.0</version>
   <description>Messages and services for openvocab-tsdf grounding.</description>
-  <maintainer email="yusuf@mewtwo">Yusuf</maintainer>
+  <maintainer email="yusuf@example.com">Yusuf</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

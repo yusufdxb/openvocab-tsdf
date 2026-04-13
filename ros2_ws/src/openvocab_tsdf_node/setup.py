@@ -15,7 +15,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Yusuf",
-    maintainer_email="yusuf@mewtwo",
+    maintainer_email="yusuf@example.com",
     description="ROS 2 node wrapping the openvocab-tsdf pipeline.",
     license="MIT",
     tests_require=["pytest"],

@@ -4,7 +4,7 @@
   <name>openvocab_tsdf_node</name>
   <version>0.1.0</version>
   <description>ROS 2 node that wraps the openvocab-tsdf pipeline and serves text-to-3D grounding.</description>
-  <maintainer email="yusuf@mewtwo">Yusuf</maintainer>
+  <maintainer email="yusuf@example.com">Yusuf</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

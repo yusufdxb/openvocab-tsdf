@@ -1,0 +1,28 @@
+[0.326s] Invoking command in '/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node': AMENT_PREFIX_PATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs:${CMAKE_PREFIX_PATH} LD_LIBRARY_PATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs/lib:${LD_LIBRARY_PATH} PYTHONPATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/lib/python3.10/site-packages:/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs/local/lib/python3.10/dist-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/build --no-deps symlink_data
+[0.466s] running develop
+[0.548s] running egg_info
+[0.548s] creating openvocab_tsdf_node.egg-info
+[0.559s] writing openvocab_tsdf_node.egg-info/PKG-INFO
+[0.559s] writing dependency_links to openvocab_tsdf_node.egg-info/dependency_links.txt
+[0.559s] writing entry points to openvocab_tsdf_node.egg-info/entry_points.txt
+[0.559s] writing requirements to openvocab_tsdf_node.egg-info/requires.txt
+[0.559s] writing top-level names to openvocab_tsdf_node.egg-info/top_level.txt
+[0.559s] writing manifest file 'openvocab_tsdf_node.egg-info/SOURCES.txt'
+[0.570s] reading manifest file 'openvocab_tsdf_node.egg-info/SOURCES.txt'
+[0.570s] writing manifest file 'openvocab_tsdf_node.egg-info/SOURCES.txt'
+[0.577s] running build_ext
+[0.577s] Creating /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/lib/python3.10/site-packages/openvocab-tsdf-node.egg-link (link to .)
+[0.577s] Installing grounding_node script to /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/lib/openvocab_tsdf_node
+[0.577s] 
+[0.577s] Installed /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node
+[0.577s] running symlink_data
+[0.577s] creating /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/ament_index
+[0.577s] creating /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/ament_index/resource_index
+[0.577s] creating /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/ament_index/resource_index/packages
+[0.577s] symbolically linking /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/resource/openvocab_tsdf_node -> /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/ament_index/resource_index/packages
+[0.577s] symbolically linking /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/package.xml -> /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/openvocab_tsdf_node
+[0.577s] creating /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/openvocab_tsdf_node/launch
+[0.577s] symbolically linking /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/launch/bringup.launch.py -> /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/openvocab_tsdf_node/launch
+[0.577s] creating /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/openvocab_tsdf_node/config
+[0.577s] symbolically linking /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/config/default.yaml -> /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/share/openvocab_tsdf_node/config
+[0.592s] Invoked command in '/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node' returned '0': AMENT_PREFIX_PATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs:${AMENT_PREFIX_PATH} CMAKE_PREFIX_PATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs:${CMAKE_PREFIX_PATH} LD_LIBRARY_PATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs/lib:${LD_LIBRARY_PATH} PYTHONPATH=/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_node/lib/python3.10/site-packages:/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/install/openvocab_tsdf_msgs/local/lib/python3.10/dist-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_node/build --no-deps symlink_data
