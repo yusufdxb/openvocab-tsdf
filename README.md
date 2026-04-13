@@ -13,11 +13,13 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 | 0. Audit + architecture + scaffold | ✅ done | `docs/architecture.md`, `docs/decisions.md`, `AGENTS.md`, env via `uv` |
 | 1. RGB-D ingestion + reference TSDF | ✅ done | Replica loader, PyTorch dense backend (~1.5 kFPS @ 320×240), marching-cubes mesh |
 | 1b. Custom GPU TSDF kernel | ✅ done | **Triton** (sm_120-compatible), 4423 FPS @ 320×240, 25 MB VRAM, parity-tested |
+| 1c. Sparse-feature backend | ✅ done | Lazy per-voxel slot allocation → **3.08× less feature memory on Replica room0** (1070 vs 3298 MB), parity-tested, same throughput |
 | 2. OpenCLIP features + 3D aggregation | ✅ done | ViT-B/16 per-frame global embedding → per-voxel weighted mean. End-to-end grounding pipeline works. |
 | 2b. Patch / dense features | ✅ done | ViT patch tokens with the **MaskCLIP** last-block-attn-bypass, lifted into 3D with per-voxel patch lookup and a near-surface feature gate. |
 | 3. Query engine + eval harness | ✅ done | Cosine-sim, connected-component cluster, YAML-driven eval producing JSON. Surface-only filter on queries. |
 | 4. Optimization | 🟡 partial | Triton already ≥ 100× the 30-FPS fuse budget; TensorRT for CLIP is next |
 | 5. ROS 2 interface | ✅ **built & smoke-tested** | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` colcon-built, service `/openvocab/ground` returns ranked targets over DDS. |
+| 5b. Live RGB-D mapping | ✅ **end-to-end** | `grounding_node live_mode:=true` subscribes to color/depth/camera_info/TF, builds the feature map online. `live_rgbd_publisher` replays any `RGBDDataset` on topics for a hardware-free demo. |
 | 6. Polish + figures | 🟡 partial | README, decisions, synthetic demo, first eval baseline logged, heatmap PLY exporter done. Publishable real-data figures pending dataset download. |
 
 ### Current numbers (RTX 5070, 12 GB)
@@ -66,6 +68,20 @@ See `eval/specs/replica_room0.yaml` for the annotation protocol (structural quer
 **CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
 - PyTorch: **1280 FPS**
 - TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.
+
+**Sparse-feature backend on Replica room0 (1.67 M voxels, 512-dim features):**
+
+| backend | FPS | feat (MB) | allocated voxels | sparsity | peak VRAM (MB) |
+|---|---|---|---|---|---|
+| dense reference | 120 | 3297.7 | 1 688 400 | 100.00 % | 4833 |
+| **sparse feature** | **125** | **1070.2** | **547 947** | **32.45 %** | **3430** |
+
+Feature-memory reduction: **3.08×** — identical integrate math, lazy per-voxel slot allocation keeps memory proportional to observed surface area rather than to the bounding box. `benchmarks/bench_sparse_features.py`.
+
+**Live ROS 2 mapping (smoke test on synthetic publisher):**
+- Publisher replays 120 NICE-SLAM frames @ 15 Hz on `/camera/color/image_raw` + `/camera/depth/image_raw` + `/camera/camera_info` + TF.
+- `grounding_node live_mode:=true` synchronizes them through `message_filters`, looks up `map→camera` through TF, runs CLIP encode + `ReferenceTSDF.integrate` per frame.
+- After 30 s integration (49 frames at stride=2), `ros2 service call /openvocab/ground "{query: 'a chair', top_percentile: 0.02}"` returns 3 ranked targets in well under a second. End-to-end hardware-free robotic demo.
 
 See [`docs/architecture.md`](docs/architecture.md) for the full plan, performance targets, and what is explicitly cut. See [`docs/decisions.md`](docs/decisions.md) for the architectural-decision log. See [`AGENTS.md`](AGENTS.md) for the rules that govern agent work in this repository.
 

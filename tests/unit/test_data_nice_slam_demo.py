@@ -27,8 +27,14 @@ def _make_fake_demo(root: Path, n: int = 3) -> None:
         np.savetxt(frames / "pose" / f"{i}.txt", pose)
 
     for name, K in (
-        ("intrinsic_depth.txt", np.array([[80, 0, 32, 0], [0, 80, 24, 0], [0, 0, 1, 0], [0, 0, 0, 1]])),
-        ("intrinsic_color.txt", np.array([[160, 0, 64, 0], [0, 160, 48, 0], [0, 0, 1, 0], [0, 0, 0, 1]])),
+        (
+            "intrinsic_depth.txt",
+            np.array([[80, 0, 32, 0], [0, 80, 24, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),
+        ),
+        (
+            "intrinsic_color.txt",
+            np.array([[160, 0, 64, 0], [0, 160, 48, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),
+        ),
         ("extrinsic_depth.txt", np.eye(4)),
         ("extrinsic_color.txt", np.eye(4)),
     ):

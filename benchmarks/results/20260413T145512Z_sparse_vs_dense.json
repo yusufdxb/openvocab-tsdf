@@ -1,0 +1,56 @@
+{
+  "name": "sparse_vs_dense",
+  "timestamp": "2026-04-13T14:55:12+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "config": "configs/replica_room0.yaml",
+    "max_frames": 250,
+    "stride": 8,
+    "voxel_size_m": 0.06,
+    "bounds_min": [
+      -2.0,
+      -3.0,
+      -2.0
+    ],
+    "bounds_max": [
+      7.0,
+      5.0,
+      3.0
+    ],
+    "feature_dim": 512
+  },
+  "runs": [
+    {
+      "backend": "dense_reference",
+      "frames": 250,
+      "integrate_s": 2.0815879049987416,
+      "fps": 120.10062097288711,
+      "feat_bytes": 3457843200,
+      "feat_mb": 3297.7,
+      "feat_voxels_allocated": 1688400,
+      "total_voxels": 1688400,
+      "peak_vram_mb": 4833.4
+    },
+    {
+      "backend": "sparse_feature",
+      "frames": 250,
+      "integrate_s": 1.9929649100013194,
+      "fps": 125.4412452248517,
+      "feat_bytes": 1122195456,
+      "feat_mb": 1070.2,
+      "feat_voxels_allocated": 547947,
+      "total_voxels": 1688400,
+      "peak_vram_mb": 3430.5
+    }
+  ],
+  "savings": {
+    "feat_mb_dense": 3297.7,
+    "feat_mb_sparse": 1070.2,
+    "feat_mem_ratio_dense_over_sparse": 3.081319908677299,
+    "sparsity_ratio": 0.3245362473347548
+  }
+}
