@@ -154,13 +154,28 @@ def encode_and_fuse(
     frame_list = list(frames) if not isinstance(frames, list) else frames
     colors = [f.color for f in frame_list]
 
+    mode = cfg.semantics.mode
     t0 = time.perf_counter()
-    img_feats = encoder.encode_images(colors, batch_size=cfg.semantics.batch_size)
+    if mode == "global":
+        img_feats = encoder.encode_images(colors, batch_size=cfg.semantics.batch_size)
+    elif mode == "patch":
+        img_feats = encoder.encode_images_patches(colors, batch_size=cfg.semantics.batch_size)
+    else:
+        raise NotImplementedError(f"semantics.mode={mode!r} not implemented")
     enc_s = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    for frame, feat in zip(frame_list, img_feats, strict=True):
-        vol.integrate(frame, feature=feat)
+    if mode == "global":
+        for frame, feat in zip(frame_list, img_feats, strict=True):
+            vol.integrate(frame, feature=feat)
+    else:  # patch
+        for frame, fm in zip(frame_list, img_feats, strict=True):
+            vol.integrate(
+                frame,
+                feature_map=fm,
+                feature_map_input_size=encoder.input_size,
+                feature_map_patch_size=encoder.patch_size,
+            )
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     fuse_s = time.perf_counter() - t0
@@ -180,6 +195,7 @@ def encode_and_fuse(
         feature_dim=np.int64(encoder.feature_dim),
         model=np.array(cfg.semantics.model, dtype=object),
         pretrained=np.array(cfg.semantics.pretrained, dtype=object),
+        mode=np.array(mode, dtype=object),
     )
 
     log.info(
@@ -222,6 +238,7 @@ def ground_text(
     data = np.load(map_path, allow_pickle=True)
     feat = torch.from_numpy(data["feat"]).to(device)
     weight = torch.from_numpy(data["weight"]).to(device)
+    tsdf = torch.from_numpy(data["tsdf"]).to(device) if "tsdf" in data.files else None
     origin = data["origin"]
     voxel_size = float(data["voxel_size"])
 
@@ -233,6 +250,7 @@ def ground_text(
     return rank_query(
         voxel_feats=feat,
         voxel_weights=weight,
+        voxel_tsdf=tsdf,
         text_embedding=q,
         origin=origin,
         voxel_size=voxel_size,

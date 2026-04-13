@@ -91,12 +91,28 @@ class ReferenceTSDF:
             self.feat.zero_()
 
     @torch.no_grad()
-    def integrate(self, frame: RGBDFrame, feature: torch.Tensor | None = None) -> None:
+    def integrate(
+        self,
+        frame: RGBDFrame,
+        feature: torch.Tensor | None = None,
+        feature_map: torch.Tensor | None = None,
+        feature_map_input_size: int = 224,
+        feature_map_patch_size: int = 16,
+    ) -> None:
         """Fold one RGB-D frame into the volume.
 
-        If `feature` is provided it must have shape `(feature_dim,)` (global
-        per-frame feature) and will be pooled into every updated voxel.
+        Feature modes (at most one may be provided):
+          - `feature`: a (D,) global per-frame embedding. Every updated voxel
+            accumulates the same vector.
+          - `feature_map`: an (Hp, Wp, D) per-patch embedding produced by a
+            ViT run on a resize-shortest-edge + center-crop square of the
+            input image. Each voxel looks up its own patch via its projected
+            pixel. `feature_map_input_size` is the square side after
+            preprocess (typically 224), `feature_map_patch_size` is the ViT's
+            patch stride in pixels (typically 16 for ViT-B/16).
         """
+        if feature is not None and feature_map is not None:
+            raise ValueError("pass either `feature` OR `feature_map`, not both")
         cfg = self.cfg
 
         T_wc = torch.as_tensor(frame.T_wc, dtype=torch.float32, device=self.device)
@@ -155,15 +171,62 @@ class ReferenceTSDF:
             c_merged = (c_old * w_old.unsqueeze(-1) + c_sample) / (w_old + 1.0).unsqueeze(-1)
             self.color.view(-1, 3).index_copy_(0, idx, c_merged)
 
+        # features are only credible on voxels near the integrated surface;
+        # free-space voxels in front of a surface would otherwise steal the
+        # features of whatever the ray eventually hits.
+        near_surface_local = tsdf_new.abs() <= 1.0  # normalized [-1, 1] band
+        # in the surviving-idx space, build a mask
+        near_surface_at_idx = near_surface_local[idx]
+
         if feature is not None and self.feat is not None:
             if feature.shape != (cfg.feature_dim,):
                 raise ValueError(
                     f"feature must be ({cfg.feature_dim},), got {tuple(feature.shape)}"
                 )
             feat_sample = feature.to(self.feat.dtype).to(self.device)
-            f_old = self.feat.view(-1, cfg.feature_dim)[idx]
-            f_merged = (f_old * w_old.unsqueeze(-1) + feat_sample) / (w_old + 1.0).unsqueeze(-1)
-            self.feat.view(-1, cfg.feature_dim).index_copy_(0, idx, f_merged)
+            sel = near_surface_at_idx.nonzero(as_tuple=False).squeeze(-1)
+            if sel.numel() > 0:
+                idx_sel = idx[sel]
+                w_sel = w_old[sel]
+                f_old = self.feat.view(-1, cfg.feature_dim)[idx_sel]
+                f_merged = (f_old * w_sel.unsqueeze(-1) + feat_sample) / (w_sel + 1.0).unsqueeze(-1)
+                self.feat.view(-1, cfg.feature_dim).index_copy_(0, idx_sel, f_merged)
+
+        if feature_map is not None and self.feat is not None:
+            # feature_map: (Hp, Wp, D) where (Hp*patch_size, Wp*patch_size) is
+            # the square the encoder saw after preprocess.
+            fm = feature_map.to(self.feat.dtype).to(self.device)
+            Hp, Wp, D = fm.shape
+            if D != cfg.feature_dim:
+                raise ValueError(f"feature_map D={D}, expected {cfg.feature_dim}")
+            S = feature_map_input_size
+            ps = feature_map_patch_size
+            # preprocess: resize shortest edge to S, then center-crop to S×S.
+            # Map image (u, v) → crop (x_c, y_c), then patch (u_p, v_p).
+            # s = S / min(H, W)
+            s = float(S) / float(min(H, W))
+            H_r = float(H) * s
+            W_r = float(W) * s
+            dx = (W_r - S) * 0.5
+            dy = (H_r - S) * 0.5
+            u_valid = u_s[idx].to(torch.float32)
+            v_valid = v_s[idx].to(torch.float32)
+            x_c = u_valid * s - dx
+            y_c = v_valid * s - dy
+            in_crop = (x_c >= 0) & (x_c < S) & (y_c >= 0) & (y_c < S)
+            u_p = (x_c / ps).clamp(0, Wp - 1).to(torch.int64)
+            v_p = (y_c / ps).clamp(0, Hp - 1).to(torch.int64)
+            # restrict to near-surface voxels (feature fidelity) AND inside the
+            # center-cropped area of the preprocessed image (patch validity)
+            eligible = in_crop & near_surface_at_idx
+            if eligible.any():
+                sel = eligible.nonzero(as_tuple=False).squeeze(-1)
+                idx_sel = idx[sel]
+                w_sel = w_old[sel]
+                feat_sample = fm[v_p[sel], u_p[sel], :]
+                f_old = self.feat.view(-1, cfg.feature_dim)[idx_sel]
+                f_merged = (f_old * w_sel.unsqueeze(-1) + feat_sample) / (w_sel + 1.0).unsqueeze(-1)
+                self.feat.view(-1, cfg.feature_dim).index_copy_(0, idx_sel, f_merged)
 
     @torch.no_grad()
     def extract_mesh(self, min_weight: float = 1.0) -> Mesh:

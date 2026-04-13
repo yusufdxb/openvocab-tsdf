@@ -52,6 +52,20 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
+## 2026-04-13 — Phase 2b: patch features land with MaskCLIP trick + near-surface feature gating
+
+**Decision.** Patch-feature mode (`semantics.mode: patch`) now lifts CLIP per-patch tokens into voxels via (a) the MaskCLIP-style last-block attention bypass, (b) per-voxel patch lookup using the encoder's preprocess mapping (resize-shortest-edge + center-crop), and (c) a near-surface feature aggregation gate (features only accumulate on voxels whose normalized TSDF is in `[-1, 1]`). Rationale:
+
+- **MaskCLIP trick.** Standard CLIP ViT mixes all tokens in its final self-attention, so patch tokens lose spatial locality. MaskCLIP (Zhou et al., 2022) observes that replacing the last block's attention with its value-only projection restores per-patch spatial meaning. We apply that only in the last transformer block and leave earlier blocks untouched.
+- **Near-surface feature gate.** Before this change, features were accumulated on every voxel within the TSDF truncation band — including free-space voxels *in front of* a surface. Those voxels would steal the features of whatever eventually occluded the ray, producing spurious hotspots. The new gate restricts feature accumulation to voxels whose `|tsdf|` is within the truncation band (i.e., the object's surface shell).
+- **Surface-only querying.** `rank_query` gains `surface_only: bool = True` + `surface_tsdf_abs_max: float = 0.5` so grounding is evaluated only on the surface shell. This matches the semantics of how features were written.
+
+**Known limitation.** On the synthetic ray-traced scene used for tests (3 untextured primitives on a black background), patch localization is still weak: natural-image CLIP is out-of-distribution on that content, and the synthetic rendering does not exercise realistic patch statistics. Real-data validation (Replica, ScanNet) is the proper test. The integration test therefore only asserts that patch mode runs end-to-end and produces non-empty clusters for each query; spatial-accuracy gating moves to the real-dataset eval.
+
+**Reversal triggers.** If on Replica the patch-MaskCLIP features fail to improve grounding hit-rate over global features by a meaningful margin (say, +20 pp hit@1), reconsider: try intermediate-layer features, learned 2D→3D projection, or drop to a dedicated dense encoder like LSeg or OpenSeg.
+
+---
+
 ## 2026-04-12 — Global CLIP features in v1; spatial localization is coarse and that is honest
 
 **Decision.** v1 uses a single global CLIP embedding per frame, pooled per voxel by weighted mean. This delivers a working open-vocab pipeline end-to-end but its spatial localization quality is bounded by how much information a single per-frame embedding can carry about *where in the frame* a concept sits.

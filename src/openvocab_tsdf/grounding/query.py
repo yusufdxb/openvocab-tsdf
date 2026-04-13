@@ -47,14 +47,17 @@ def _connected_components_3d(mask: np.ndarray, eps_vox: int = 1) -> np.ndarray:
 
 def rank_query(
     *,
-    voxel_feats: torch.Tensor,  # (Nx, Ny, Nz, D) or flat (M, D) with index map
+    voxel_feats: torch.Tensor,  # (Nx, Ny, Nz, D)
     voxel_weights: torch.Tensor,  # same leading shape
     text_embedding: torch.Tensor,  # (D,), normalized
     origin: np.ndarray,  # (3,)
     voxel_size: float,
+    voxel_tsdf: torch.Tensor | None = None,  # (Nx, Ny, Nz) — for surface filtering
     min_weight: float = 1.0,
     score_threshold: float | None = 0.22,
     top_percentile: float | None = None,
+    surface_only: bool = True,
+    surface_tsdf_abs_max: float = 0.5,
     cluster_eps_vox: int = 2,
     min_cluster_voxels: int = 8,
     top_k: int = 5,
@@ -74,6 +77,8 @@ def rank_query(
     with torch.no_grad():
         scores = cosine_score(text_embedding, voxel_feats)  # (Nx,Ny,Nz)
         observed = voxel_weights >= min_weight
+        if surface_only and voxel_tsdf is not None:
+            observed = observed & (voxel_tsdf.abs() <= surface_tsdf_abs_max)
         if top_percentile is not None:
             observed_scores = scores[observed]
             if observed_scores.numel() == 0:
