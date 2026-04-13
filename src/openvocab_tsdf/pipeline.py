@@ -116,6 +116,24 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
                 device=m.device,
             )
         )
+    if m.backend == "block_hash":
+        from openvocab_tsdf.mapping.block_hash import BlockHashTSDF, BlockHashTSDFConfig
+
+        return BlockHashTSDF(
+            BlockHashTSDFConfig(
+                voxel_size_m=m.voxel_size_m,
+                truncation_distance_m=m.truncation_distance_m,
+                bounds_min=bmin,
+                bounds_max=bmax,
+                max_weight=m.max_weight,
+                store_color=m.store_color,
+                store_features=m.store_features,
+                feature_dim=m.feature_dim if m.store_features else 0,
+                initial_feat_capacity=m.initial_feat_capacity,
+                max_feat_capacity=m.max_feat_capacity,
+                device=m.device,
+            )
+        )
     raise NotImplementedError(f"mapping backend '{m.backend}' not implemented")
 
 
