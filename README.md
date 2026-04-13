@@ -47,6 +47,13 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 
 See `eval/specs/replica_room0.yaml` and `eval/specs/replica_office0.yaml` for the annotation protocol (structural queries derived from the mesh's horizontal-surface z histogram; object bboxes from a `scripts/inspect_replica_mesh.py` density map, conservatively widened with a 0.2 m bbox slack).
 
+**Publishable figures** — each query renders as a 3-panel xy/xz/yz projection with the mesh washed out in gray, the top-20 % heatmap voxels colored viridis, and the hand-annotated GT bbox outlined in red. Representative examples:
+
+- `figures/office0/a_desk.png` — the hottest heatmap voxels fall squarely inside the GT desk bbox in all three views; this is the cleanest real-data "it works" figure in the repo.
+- `figures/room0/a_sofa.png` — hot voxels scatter across the room; illustrates honestly where the current CLIP-global features are weak on `room0`.
+
+Regenerate: `python scripts/render_figures.py --mesh outputs/replica_<scene>_mesh.ply --heatmap-dir outputs/heatmaps_replica_<scene> --spec eval/specs/replica_<scene>.yaml --out-dir figures/<scene>`.
+
 **Headline cross-scene / cross-config table (best configuration per row):**
 
 | scene | voxel | frames | mode | mean-sub | top% | hit@1 | hit@5 | hit-L2 (m) |

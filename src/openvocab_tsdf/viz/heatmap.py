@@ -63,7 +63,6 @@ def save_query_heatmap_ply(
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
     data = np.load(map_path, allow_pickle=True)
-    feat = torch.from_numpy(data["feat"]).to(device)
     weight = torch.from_numpy(data["weight"]).to(device)
     tsdf = torch.from_numpy(data["tsdf"]).to(device)
     origin = data["origin"].astype(np.float32)
@@ -73,8 +72,23 @@ def save_query_heatmap_ply(
         OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
     )
     q = enc.encode_texts([query])[0]
-    D = feat.shape[-1]
-    scores = (feat.reshape(-1, D) @ q).reshape(feat.shape[:3])
+
+    is_sparse = bool(data["sparse"]) if "sparse" in data.files else False
+    if is_sparse:
+        dims = tuple(int(d) for d in data["dims"])
+        slot = torch.from_numpy(data["voxel_slot"]).to(device)
+        pool = torch.from_numpy(data["feat_pool"]).to(device)
+        pool_scores = pool @ q
+        scores = torch.full(
+            (dims[0] * dims[1] * dims[2],), -1e4, dtype=torch.float32, device=device
+        )
+        alloc = slot.view(-1) >= 0
+        scores[alloc] = pool_scores[slot.view(-1)[alloc].long()]
+        scores = scores.view(*dims)
+    else:
+        feat = torch.from_numpy(data["feat"]).to(device)
+        D = feat.shape[-1]
+        scores = (feat.reshape(-1, D) @ q).reshape(feat.shape[:3])
 
     surface = (weight >= min_weight) & (tsdf.abs() <= surface_tsdf_abs_max)
     if not surface.any():

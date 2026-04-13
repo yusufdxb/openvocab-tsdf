@@ -52,13 +52,15 @@ def _load_replica_ply(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return xyz, nrm, rgb
 
 
-def _print_density_map(pts: np.ndarray, x_lo: float, x_hi: float, y_lo: float, y_hi: float, grid: float) -> None:
+def _print_density_map(
+    pts: np.ndarray, x_lo: float, x_hi: float, y_lo: float, y_hi: float, grid: float
+) -> None:
     bins_x = np.arange(x_lo, x_hi + grid, grid)
     bins_y = np.arange(y_lo, y_hi + grid, grid)
     ix = np.digitize(pts[:, 0], bins_x) - 1
     iy = np.digitize(pts[:, 1], bins_y) - 1
     counts = np.zeros((len(bins_x) - 1, len(bins_y) - 1), dtype=np.int64)
-    for a, b in zip(ix, iy):
+    for a, b in zip(ix, iy, strict=True):
         if 0 <= a < counts.shape[0] and 0 <= b < counts.shape[1]:
             counts[a, b] += 1
 
@@ -103,12 +105,12 @@ def main() -> None:
     top2 = sorted([(edges[i], edges[i + 1], h) for i, h in peaks[:2]])
     floor_z = (top2[0][0] + top2[0][1]) / 2
     ceil_z = (top2[1][0] + top2[1][1]) / 2
-    print(f"\n-> floor ≈ z={floor_z:+.2f}, ceiling ≈ z={ceil_z:+.2f}, height={abs(ceil_z-floor_z):.2f}")
+    print(
+        f"\n-> floor ≈ z={floor_z:+.2f}, ceiling ≈ z={ceil_z:+.2f}, height={abs(ceil_z-floor_z):.2f}"
+    )
 
     obj_mask = (
-        ~horiz
-        & (xyz[:, 2] > min(floor_z, ceil_z) + 0.1)
-        & (xyz[:, 2] < max(floor_z, ceil_z) - 0.1)
+        ~horiz & (xyz[:, 2] > min(floor_z, ceil_z) + 0.1) & (xyz[:, 2] < max(floor_z, ceil_z) - 0.1)
     )
     interior = (
         (xyz[:, 0] > xyz[:, 0].min() + 0.2)
