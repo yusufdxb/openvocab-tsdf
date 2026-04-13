@@ -220,9 +220,7 @@ class BlockHashTSDF:
             return
 
         # Stage 2: expand surviving blocks into their 8³ voxels and run the
-        # standard integrate math on those only.
-        n_blocks = int(surviving.numel())
-        # block coords in world
+        # standard integrate math on those only. block coords in world:
         b_ix = surviving // (Nby * Nbz)
         tmp = surviving % (Nby * Nbz)
         b_iy = tmp // Nbz
