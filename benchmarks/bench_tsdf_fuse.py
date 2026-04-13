@@ -40,7 +40,7 @@ def main() -> None:
     p.add_argument("--width", type=int, default=320)
     p.add_argument("--height", type=int, default=240)
     p.add_argument("--voxel-size", type=float, default=0.02)
-    p.add_argument("--backend", type=str, default="reference", choices=["reference", "cuda"])
+    p.add_argument("--backend", type=str, default="reference", choices=["reference", "triton"])
     p.add_argument("--warmup", type=int, default=2)
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--out-dir", type=Path, default=Path("benchmarks/results"))
@@ -55,15 +55,34 @@ def main() -> None:
         primitives, num_frames=args.frames, width=args.width, height=args.height, radius=1.6
     )
 
-    cfg = ReferenceTSDFConfig(
-        voxel_size_m=args.voxel_size,
-        truncation_distance_m=5 * args.voxel_size,
-        bounds_min=(-1.0, -0.6, -1.0),
-        bounds_max=(1.0, 0.6, 1.0),
-        store_color=True,
-        device="cuda:0" if torch.cuda.is_available() else "cpu",
-    )
-    vol = ReferenceTSDF(cfg)
+    bounds_min = (-1.0, -0.6, -1.0)
+    bounds_max = (1.0, 0.6, 1.0)
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    if args.backend == "reference":
+        cfg = ReferenceTSDFConfig(
+            voxel_size_m=args.voxel_size,
+            truncation_distance_m=5 * args.voxel_size,
+            bounds_min=bounds_min,
+            bounds_max=bounds_max,
+            store_color=True,
+            device=device,
+        )
+        vol = ReferenceTSDF(cfg)
+    else:  # triton
+        from openvocab_tsdf.mapping.triton_backend import TritonTSDF, TritonTSDFConfig
+
+        if not torch.cuda.is_available():
+            raise SystemExit("triton backend requires CUDA")
+        cfg = TritonTSDFConfig(
+            voxel_size_m=args.voxel_size,
+            truncation_distance_m=5 * args.voxel_size,
+            bounds_min=bounds_min,
+            bounds_max=bounds_max,
+            store_color=True,
+            device=device,
+        )
+        vol = TritonTSDF(cfg)
 
     def _run_once() -> float:
         vol.reset()

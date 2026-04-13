@@ -52,6 +52,22 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
+## 2026-04-12 — Triton for the first "custom kernel" backend; native CUDA/CMake deferred
+
+**Decision.** The first fast mapping backend is written in **Triton**, not hand-written CUDA+CMake. Native CUDA is deferred to Phase 4 (optional) when we either (a) install CUDA 12.8 toolkit or (b) justify the additional complexity with a measurable gap Triton cannot close.
+
+**Rationale.** The system nvcc is 11.5 and cannot target the RTX 5070's Blackwell `sm_120` compute capability — native CUDA builds would require a toolkit install. Triton 3.6 ships with PyTorch 2.11 and already supports `sm_120` via the bundled build, so the kernel path works today with no system changes. Triton is also the idiomatic choice for new GPU work at this scale in 2025/2026; hand-written `.cu` is still valuable but is a second-order optimization unless Triton blocks us.
+
+**What this does NOT change.**
+- The reference PyTorch implementation remains the correctness oracle.
+- Every Triton kernel must pass a parity test against the reference within tolerance.
+- Every benchmark claim still requires a JSON file in `benchmarks/results/`.
+- The "custom GPU kernel" framing for portfolio purposes is accurate: Triton kernels are real kernels with explicit memory layout, block structure, and masking.
+
+**Reversal triggers.** (1) Install CUDA 12.8 toolkit and re-evaluate if we need handwritten kernels for sparse voxel hashing that Triton cannot express cleanly. (2) Triton generates poor code for a specific kernel — drop down to CUDA for that one kernel only.
+
+---
+
 ## 2026-04-12 — No SLAM; consume external poses
 
 **Decision.** The pipeline consumes camera poses from dataset metadata, recorded bags, or an external localization stack. We do not build or embed a SLAM component.

@@ -18,7 +18,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from openvocab_tsdf.config import Config
 from openvocab_tsdf.data.base import RGBDDataset
 from openvocab_tsdf.data.replica import ReplicaDataset
-from openvocab_tsdf.mapping.base import Mesh
+from openvocab_tsdf.mapping.base import Mesh, TSDFVolume
 from openvocab_tsdf.mapping.reference import ReferenceTSDF, ReferenceTSDFConfig
 
 log = logging.getLogger(__name__)
@@ -49,24 +49,42 @@ def _auto_bounds(
     return bmin, bmax
 
 
-def build_reference_tsdf(cfg: Config, dataset: RGBDDataset) -> ReferenceTSDF:
+def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
     m = cfg.mapping
     if m.bounds_min is None or m.bounds_max is None:
         bmin, bmax = _auto_bounds(dataset, m.auto_bounds_radius_m)
     else:
         bmin, bmax = tuple(m.bounds_min), tuple(m.bounds_max)
-    tsdf_cfg = ReferenceTSDFConfig(
-        voxel_size_m=m.voxel_size_m,
-        truncation_distance_m=m.truncation_distance_m,
-        bounds_min=bmin,
-        bounds_max=bmax,
-        max_weight=m.max_weight,
-        store_color=m.store_color,
-        store_features=m.store_features,
-        feature_dim=m.feature_dim if m.store_features else 0,
-        device=m.device,
-    )
-    return ReferenceTSDF(tsdf_cfg)
+
+    if m.backend == "reference":
+        ref_cfg = ReferenceTSDFConfig(
+            voxel_size_m=m.voxel_size_m,
+            truncation_distance_m=m.truncation_distance_m,
+            bounds_min=bmin,
+            bounds_max=bmax,
+            max_weight=m.max_weight,
+            store_color=m.store_color,
+            store_features=m.store_features,
+            feature_dim=m.feature_dim if m.store_features else 0,
+            device=m.device,
+        )
+        return ReferenceTSDF(ref_cfg)
+    if m.backend == "triton":
+        from openvocab_tsdf.mapping.triton_backend import TritonTSDF, TritonTSDFConfig
+
+        if m.store_features:
+            log.warning("triton backend does not store features yet; semantics will use reference")
+        tri_cfg = TritonTSDFConfig(
+            voxel_size_m=m.voxel_size_m,
+            truncation_distance_m=m.truncation_distance_m,
+            bounds_min=bmin,
+            bounds_max=bmax,
+            max_weight=m.max_weight,
+            store_color=m.store_color,
+            device=m.device,
+        )
+        return TritonTSDF(tri_cfg)
+    raise NotImplementedError(f"mapping backend '{m.backend}' not implemented")
 
 
 def fuse_dataset(cfg: Config, output_path: Path) -> Mesh:
@@ -74,7 +92,7 @@ def fuse_dataset(cfg: Config, output_path: Path) -> Mesh:
     from openvocab_tsdf.viz.mesh import save_ply
 
     dataset = build_dataset(cfg)
-    vol = build_reference_tsdf(cfg, dataset)
+    vol = build_tsdf(cfg, dataset)
 
     n = len(dataset)
     t0 = time.perf_counter()

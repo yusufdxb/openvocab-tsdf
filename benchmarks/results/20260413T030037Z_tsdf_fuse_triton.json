@@ -1,0 +1,32 @@
+{
+  "name": "tsdf_fuse",
+  "backend": "triton",
+  "timestamp": "2026-04-13T03:00:37+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "frames": 64,
+    "width": 320,
+    "height": 240,
+    "voxel_size_m": 0.02,
+    "volume_dims": [
+      100,
+      61,
+      100
+    ],
+    "total_voxels": 610000,
+    "warmup": 2,
+    "repeats": 3
+  },
+  "metrics": {
+    "fps_mean": 4423.4695238277345,
+    "fps_min": 4140.848101514868,
+    "fps_max": 4593.931616854486,
+    "seconds_mean": 0.01449923166668062,
+    "observed_voxels": 258906,
+    "peak_vram_mb": 25.2
+  }
+}
