@@ -8,14 +8,26 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 
 ## Status
 
-- Phase 0 (audit + architecture + scaffold) — **in progress**
-- Phase 1 (RGB-D ingestion + reference TSDF) — pending
-- Phase 1b (custom CUDA TSDF kernel) — pending
-- Phase 2 (OpenCLIP features + 3D aggregation) — pending
-- Phase 3 (query engine + eval harness) — pending
-- Phase 4 (optimization) — pending
-- Phase 5 (ROS 2 interface) — pending
-- Phase 6 (polish) — pending
+| Phase | State | Highlights |
+|---|---|---|
+| 0. Audit + architecture + scaffold | ✅ done | `docs/architecture.md`, `docs/decisions.md`, `AGENTS.md`, env via `uv` |
+| 1. RGB-D ingestion + reference TSDF | ✅ done | Replica loader, PyTorch dense backend (~1.5 kFPS @ 320×240), marching-cubes mesh |
+| 1b. Custom GPU TSDF kernel | ✅ done | **Triton** (sm_120-compatible), 4423 FPS @ 320×240, 25 MB VRAM, parity-tested |
+| 2. OpenCLIP features + 3D aggregation | ✅ done (global) | ViT-B/16 per-frame → per-voxel weighted mean. End-to-end grounding works on a synthetic multi-object scene. |
+| 2b. Patch / mask features | ⏸ next | Needed to tighten spatial localization; spec'd in `docs/decisions.md` |
+| 3. Query engine + eval harness | ✅ done | Cosine-sim, connected-component cluster, YAML-driven eval producing JSON |
+| 4. Optimization | 🟡 partial | Triton already ≥ 100× the 30-FPS fuse budget; TensorRT for CLIP is next |
+| 5. ROS 2 interface | 🟡 scaffolded | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` + launch file; colcon build pending |
+| 6. Polish + figures | 🟡 partial | README, decisions, synthetic demo, first eval baseline logged |
+
+### Current numbers on a synthetic scene (RTX 5070, 12 GB)
+
+- TSDF fuse, Triton backend: **4423 FPS**, 25 MB peak VRAM
+- TSDF fuse, reference backend: 1486 FPS, 68 MB peak VRAM
+- End-to-end grounding query (text encode + voxel scan + cluster): **~50 ms**
+- First honest grounding baseline (global features, 3-case synthetic eval): hit@1 = 0 %, hit@5 = 33 %, mean top-1 centroid L2 = 0.61 m
+
+Real-dataset numbers (ScanNet / Replica) and the Phase 2b patch-feature numbers land next.
 
 See [`docs/architecture.md`](docs/architecture.md) for the full plan, performance targets, and what is explicitly cut. See [`docs/decisions.md`](docs/decisions.md) for the architectural-decision log. See [`AGENTS.md`](AGENTS.md) for the rules that govern agent work in this repository.
 
