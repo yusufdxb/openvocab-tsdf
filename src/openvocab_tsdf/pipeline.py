@@ -16,7 +16,7 @@ import torch
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from openvocab_tsdf.config import Config
-from openvocab_tsdf.data.base import RGBDDataset
+from openvocab_tsdf.data.base import RGBDDataset, RGBDFrame
 from openvocab_tsdf.data.replica import ReplicaDataset
 from openvocab_tsdf.mapping.base import Mesh, TSDFVolume
 from openvocab_tsdf.mapping.reference import ReferenceTSDF, ReferenceTSDFConfig
@@ -85,6 +85,164 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
         )
         return TritonTSDF(tri_cfg)
     raise NotImplementedError(f"mapping backend '{m.backend}' not implemented")
+
+
+def _frame_to_pil(frame: RGBDFrame):
+    from PIL import Image
+
+    return Image.fromarray(frame.color)
+
+
+def encode_and_fuse(
+    cfg: Config,
+    frames: list[RGBDFrame] | RGBDDataset,
+    map_out: Path,
+) -> dict:
+    """Encode each frame with OpenCLIP and fuse geometry + global features.
+
+    Features are stored in the reference backend only (Phase 2 limitation). The
+    Triton backend will grow a feature path in Phase 2b.
+    """
+    from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
+
+    if cfg.mapping.backend != "reference":
+        log.warning("semantics require the reference backend; forcing reference for this run")
+    m = cfg.mapping
+    # build a reference volume regardless of configured backend
+    if m.bounds_min is None or m.bounds_max is None:
+        # caller passed a plain list of frames; synthesize a simple bounds fit
+        if isinstance(frames, list):
+
+            class _S:
+                def __getitem__(self, i):
+                    return frames[i]
+
+            bmin, bmax = _auto_bounds(_S(), m.auto_bounds_radius_m)
+        else:
+            bmin, bmax = _auto_bounds(frames, m.auto_bounds_radius_m)
+    else:
+        bmin, bmax = tuple(m.bounds_min), tuple(m.bounds_max)
+
+    # force features on, force reference backend
+    ref_cfg = ReferenceTSDFConfig(
+        voxel_size_m=m.voxel_size_m,
+        truncation_distance_m=m.truncation_distance_m,
+        bounds_min=bmin,
+        bounds_max=bmax,
+        max_weight=m.max_weight,
+        store_color=m.store_color,
+        store_features=True,
+        feature_dim=m.feature_dim,
+        device=m.device,
+    )
+    vol = ReferenceTSDF(ref_cfg)
+
+    encoder = OpenCLIPEncoder(
+        OpenCLIPConfig(
+            model=cfg.semantics.model,
+            pretrained=cfg.semantics.pretrained,
+            device=cfg.semantics.device,
+            dtype=cfg.semantics.dtype,
+        )
+    )
+    if encoder.feature_dim != m.feature_dim:
+        raise ValueError(
+            f"feature_dim mismatch: encoder={encoder.feature_dim}, mapping.feature_dim={m.feature_dim}"
+        )
+
+    # materialize frames list when needed (we need to batch colors for CLIP)
+    frame_list = list(frames) if not isinstance(frames, list) else frames
+    colors = [f.color for f in frame_list]
+
+    t0 = time.perf_counter()
+    img_feats = encoder.encode_images(colors, batch_size=cfg.semantics.batch_size)
+    enc_s = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    for frame, feat in zip(frame_list, img_feats, strict=True):
+        vol.integrate(frame, feature=feat)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    fuse_s = time.perf_counter() - t0
+
+    # save map
+    map_out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        map_out,
+        tsdf=vol.tsdf.cpu().numpy(),
+        weight=vol.weight.cpu().numpy(),
+        color=vol.color.cpu().numpy() if vol.color is not None else np.zeros(0),
+        feat=vol.feat.cpu().numpy(),
+        origin=vol.origin.cpu().numpy(),
+        voxel_size=np.float32(vol.voxel_size_m),
+        truncation=np.float32(vol.truncation_distance_m),
+        dims=np.int64(vol.dims),
+        feature_dim=np.int64(encoder.feature_dim),
+        model=np.array(cfg.semantics.model, dtype=object),
+        pretrained=np.array(cfg.semantics.pretrained, dtype=object),
+    )
+
+    log.info(
+        "encoded %d frames in %.2fs (%.1f FPS); fused features in %.2fs -> %s",
+        len(frame_list),
+        enc_s,
+        len(frame_list) / enc_s if enc_s > 0 else 0,
+        fuse_s,
+        map_out,
+    )
+    return {
+        "num_frames": len(frame_list),
+        "encode_s": enc_s,
+        "fuse_s": fuse_s,
+        "map_path": str(map_out),
+        "dims": list(vol.dims),
+        "feature_dim": int(encoder.feature_dim),
+    }
+
+
+def ground_text(
+    map_path: Path,
+    query: str,
+    *,
+    model: str = "ViT-B-16",
+    pretrained: str = "laion2b_s34b_b88k",
+    device: str = "cuda:0",
+    dtype: str = "fp16",
+    min_weight: float = 1.0,
+    score_threshold: float | None = 0.22,
+    top_percentile: float | None = None,
+    cluster_eps_vox: int = 2,
+    min_cluster_voxels: int = 8,
+    top_k: int = 5,
+) -> list:
+    """Load a saved map, embed a query, return ranked 3D targets."""
+    from openvocab_tsdf.grounding.query import rank_query
+    from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
+
+    data = np.load(map_path, allow_pickle=True)
+    feat = torch.from_numpy(data["feat"]).to(device)
+    weight = torch.from_numpy(data["weight"]).to(device)
+    origin = data["origin"]
+    voxel_size = float(data["voxel_size"])
+
+    encoder = OpenCLIPEncoder(
+        OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
+    )
+    q = encoder.encode_texts([query])[0]
+
+    return rank_query(
+        voxel_feats=feat,
+        voxel_weights=weight,
+        text_embedding=q,
+        origin=origin,
+        voxel_size=voxel_size,
+        min_weight=min_weight,
+        score_threshold=score_threshold,
+        top_percentile=top_percentile,
+        cluster_eps_vox=cluster_eps_vox,
+        min_cluster_voxels=min_cluster_voxels,
+        top_k=top_k,
+    )
 
 
 def fuse_dataset(cfg: Config, output_path: Path) -> Mesh:

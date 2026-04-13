@@ -71,19 +71,72 @@ def fuse(
 
 
 @app.command()
-def encode(config: Path = typer.Option(..., "--config", "-c")) -> None:
-    """Run the VLM encoder over a dataset, cache features. [Phase 2]"""
-    raise typer.Exit(code=2)
+def encode(
+    config: Path = typer.Option(..., "--config", "-c"),
+    output: Path = typer.Option(Path("outputs/map.npz"), "--output", "-o"),
+) -> None:
+    """Run the VLM encoder over a dataset, fuse features into voxels, save map."""
+    import logging
+
+    from openvocab_tsdf.config import load_config
+    from openvocab_tsdf.pipeline import build_dataset, encode_and_fuse
+
+    logging.basicConfig(level="INFO", format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    cfg = load_config(config)
+    dataset = build_dataset(cfg)
+    stats = encode_and_fuse(cfg, dataset, output)
+    console.print(
+        f"[green]encoded[/green] {stats['num_frames']} frames "
+        f"(enc {stats['encode_s']:.2f}s, fuse {stats['fuse_s']:.2f}s) -> {output}"
+    )
 
 
 @app.command()
 def ground(
-    config: Path = typer.Option(..., "--config", "-c"),
+    map_path: Path = typer.Option(..., "--map", "-m"),
     query: str = typer.Option(..., "--query", "-q"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
     top_k: int = typer.Option(5, "--top-k"),
+    score_threshold: float = typer.Option(0.22, "--score-threshold"),
+    min_cluster_voxels: int = typer.Option(8, "--min-cluster"),
 ) -> None:
-    """Text-to-3D grounding query. [Phase 3]"""
-    raise typer.Exit(code=2)
+    """Text-to-3D grounding query against a saved map."""
+    from openvocab_tsdf.config import load_config
+    from openvocab_tsdf.pipeline import ground_text
+
+    if config is not None:
+        cfg = load_config(config)
+        kwargs = {
+            "model": cfg.semantics.model,
+            "pretrained": cfg.semantics.pretrained,
+            "device": cfg.semantics.device,
+            "dtype": cfg.semantics.dtype,
+        }
+    else:
+        kwargs = {}
+
+    results = ground_text(
+        map_path,
+        query,
+        **kwargs,
+        score_threshold=score_threshold,
+        min_cluster_voxels=min_cluster_voxels,
+        top_k=top_k,
+    )
+
+    table = Table(title=f"grounding: {query!r}")
+    table.add_column("#")
+    table.add_column("center")
+    table.add_column("score", justify="right")
+    table.add_column("voxels", justify="right")
+    for i, r in enumerate(results):
+        cx, cy, cz = r.center_m
+        table.add_row(
+            str(i + 1), f"({cx:+.2f}, {cy:+.2f}, {cz:+.2f})", f"{r.score:.3f}", str(r.voxel_count)
+        )
+    console.print(table)
+    if not results:
+        console.print("[yellow]no clusters above threshold[/yellow]")
 
 
 @app.command()

@@ -52,6 +52,23 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
+## 2026-04-12 — Global CLIP features in v1; spatial localization is coarse and that is honest
+
+**Decision.** v1 uses a single global CLIP embedding per frame, pooled per voxel by weighted mean. This delivers a working open-vocab pipeline end-to-end but its spatial localization quality is bounded by how much information a single per-frame embedding can carry about *where in the frame* a concept sits.
+
+**Observed behavior on synthetic 3-object scene (red sphere, green floor slab, blue bar).**
+- Query-ordering on colors is correct: "a red ball" produces higher-scored clusters than "a blue bar" in a red-dominant view, and vice versa.
+- Query-direction is partially correct: "a blue bar" localizes on the scene's blue-bar half-space; "a red ball" localizes near the sphere in some configurations.
+- Localization is noisy at ≤ 4 cm voxel size: the top-percentile clusters drift to the "most observed" region rather than to the object's true bbox.
+
+**Why this is acceptable for v1.** The goal of Phase 2 is to prove the full pipeline runs and produces a non-random signal. It does. The goal of Phase 2b / Phase 3 is to improve localization with either patch-token features, SAM-based mask features, or dense segmentation encoders (LSeg / OpenSeg). Those are known fixes and are scheduled.
+
+**Reversal triggers.** If Phase 2b lands and dense patch/region features do not materially improve grounding accuracy on a real dataset (ScanNet val), revisit the aggregation strategy: learned pooling, observation-visibility weighting, or a background-subtracted score like "score_voxel minus scene-mean-score per query".
+
+**Implementation note.** `rank_query` now supports a `top_percentile` mode (e.g., keep the top 2 % of observed voxels) so threshold tuning is adaptive across queries with different absolute CLIP similarity magnitudes.
+
+---
+
 ## 2026-04-12 — Triton for the first "custom kernel" backend; native CUDA/CMake deferred
 
 **Decision.** The first fast mapping backend is written in **Triton**, not hand-written CUDA+CMake. Native CUDA is deferred to Phase 4 (optional) when we either (a) install CUDA 12.8 toolkit or (b) justify the additional complexity with a measurable gap Triton cannot close.
