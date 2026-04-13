@@ -1,0 +1,10 @@
+# Ground a free-form text query to 3D targets in the current map.
+
+string query                        # e.g. "red chair near the desk"
+int32 top_k                         # max targets to return (0 -> server default)
+float32 score_threshold             # absolute cosine threshold; use NaN to use percentile
+float32 top_percentile              # e.g. 0.02 = top 2%; use NaN to use score_threshold
+---
+std_msgs/Header header              # frame_id = map frame
+openvocab_tsdf_msgs/GroundingTarget[] targets
+string diagnostic                   # optional note (e.g. "used percentile fallback")

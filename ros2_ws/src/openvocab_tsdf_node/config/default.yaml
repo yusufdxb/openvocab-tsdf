@@ -1,0 +1,10 @@
+/openvocab_grounding:
+  ros__parameters:
+    map_frame: "map"
+    model: "ViT-B-16"
+    pretrained: "laion2b_s34b_b88k"
+    device: "cuda:0"
+    dtype: "fp16"
+    default_top_k: 5
+    default_score_threshold: 0.22
+    default_top_percentile: 0.02
