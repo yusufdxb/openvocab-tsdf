@@ -1,0 +1,43 @@
+# Replica room_0 scene config.
+# Inherits all other fields from configs/default.yaml when loaded by scripts
+# that merge them; standalone use of this file is also valid and self-contained.
+
+dataset:
+  name: replica
+  root: ~/data/replica
+  scene: room_0
+  max_frames: 500
+  stride: 1
+
+camera:
+  depth_scale: 6553.5
+  depth_trunc_m: 6.0
+
+mapping:
+  voxel_size_m: 0.02
+  truncation_distance_m: 0.1
+  hash_capacity: 1048576
+  block_size: 8
+  backend: reference
+  device: cuda:0
+  store_color: true
+  store_features: false   # geometry-only sanity run; flip to true in Phase 2
+  feature_dim: 512
+
+semantics:
+  model: ViT-B-16
+  pretrained: laion2b_s34b_b88k
+  mode: global
+  batch_size: 16
+  device: cuda:0
+  dtype: fp16
+
+grounding:
+  top_k: 5
+  score_threshold: 0.22
+  cluster_eps_vox: 2
+  min_cluster_voxels: 8
+
+logging:
+  level: INFO
+  rich_tracebacks: true

@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openvocab-tsdf"
+version = "0.1.0.dev0"
+description = "GPU-accelerated open-vocabulary 3D mapping and language grounding for robotics"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Yusuf" }]
+keywords = ["tsdf", "open-vocabulary", "3d-mapping", "clip", "robotics", "ros2", "cuda"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "License :: OSI Approved :: MIT License",
+]
+
+dependencies = [
+  "numpy>=1.26",
+  "torch>=2.6",
+  "torchvision>=0.21",
+  "open_clip_torch>=2.24",
+  "open3d>=0.18",
+  "pillow>=10",
+  "imageio>=2.34",
+  "tqdm>=4.66",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.4",
+  "pyyaml>=6.0",
+  "rich>=13.7",
+  "typer>=0.12",
+  "scipy>=1.13",
+  "scikit-image>=0.23",
+  "matplotlib>=3.8",
+  "einops>=0.8",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pytest-benchmark>=4.0",
+  "pytest-cov>=5.0",
+  "pytest-xdist>=3.5",
+  "hypothesis>=6.100",
+  "ruff>=0.5",
+  "black>=24.4",
+  "mypy>=1.10",
+  "pre-commit>=3.7",
+  "ipykernel>=6.29",
+]
+dense = [
+  "segment-anything>=1.0",
+]
+
+[project.scripts]
+openvocab-tsdf = "openvocab_tsdf.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/yusuf/openvocab-tsdf"
+Issues = "https://github.com/yusuf/openvocab-tsdf/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["openvocab_tsdf"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+  "slow: slow tests (>5s)",
+  "gpu: requires a CUDA-capable GPU",
+  "dataset: requires a dataset download",
+  "benchmark: benchmarks, excluded from default run",
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+ignore_missing_imports = true

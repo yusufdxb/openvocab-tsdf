@@ -1,0 +1,63 @@
+# Architectural Decisions (ADR log)
+
+Append-only log. Each entry: date, decision, rationale, alternatives considered, reversal record if any.
+
+---
+
+## 2026-04-12 — TSDF + sparse voxel hashing as core, not 3DGS
+
+**Decision.** The geometric backbone is a GPU-resident TSDF with sparse voxel hashing. 3DGS is explicitly out of the v1 scope. If a rendering layer is added later, it is additive, not a replacement for the voxel map.
+
+**Rationale.** TSDF / voxel maps are queryable by point, box, and ray in O(1) to O(log n); they integrate cleanly with planners; their correctness is measurable against mesh ground truth. 3DGS is optimized for photorealism, not geometric queries or replan-time consumption, and every "robotics 3DGS" project we surveyed ends up reintroducing a voxel or mesh companion to do the actual robotics work. For a portfolio project arguing "I can build a real-time 3D perception system for robotics," starting from 3DGS would dilute the claim.
+
+**Alternatives considered.**
+- *Pure 3DGS.* Rejected: rendering-centric, not planner-friendly.
+- *NeRF / neural field.* Rejected: training-time cost, slower queries, same planner mismatch.
+- *Dense TSDF only (no hashing).* Rejected for v1 target of 10 m³ @ 2 cm — dense grid works at that scale but does not scale past it, and hashing is the harder, more differentiating implementation.
+
+**Reversal triggers.** If patch/region-level CLIP aggregation proves insufficient even at dense voxel granularity, a neural radiance / feature field might re-enter the scope. Not before.
+
+---
+
+## 2026-04-12 — Custom CUDA is in scope and welcome
+
+**Decision.** Hot-path integration and aggregation kernels are written in custom CUDA. A slower PyTorch reference implementation is maintained for parity testing.
+
+**Rationale.** The sibling `go2-semantic-nav` repository explicitly bans custom kernels; they are owned by `GO2-Perception-Optimization`. openvocab-tsdf is the right project to demonstrate that work because (a) it is a desktop-class target where iteration is cheap, (b) custom CUDA is exactly the portfolio gap we are trying to fill, and (c) the reference implementation gives us a non-CUDA escape path for CI and for debugging.
+
+**Alternatives considered.**
+- *nvblox.* Mature, fast. Rejected because importing a black box undermines the "I built this" claim; may be referenced for comparison benchmarks.
+- *Open3D TSDF.* Python-bound, not GPU-resident in a useful way for our pipeline. Used as a validation oracle, not as the runtime.
+- *PyTorch-only.* Fast enough for a demo, not fast enough to earn the "serious GPU systems" framing.
+
+---
+
+## 2026-04-12 — OpenCLIP ViT-B/16 as baseline VLM
+
+**Decision.** Default open-vocab encoder is OpenCLIP ViT-B/16, fp16, frozen weights. ViT-L/14 available as a quality-mode switch. Dense segmentation-style encoders (LSeg / OpenSeg) and SAM-based mask features are Phase 2b experiments.
+
+**Rationale.** Reproducibility, broad benchmark coverage, predictable VRAM use. Starting dense would entangle semantic aggregation with mask-prompt engineering on day one; global features first lets us nail the 3D aggregation math before adding that complexity.
+
+**Alternatives considered.** Same as above; noted as Phase 2b.
+
+---
+
+## 2026-04-12 — Python 3.10 + uv, PyTorch 2.11 + CUDA 12.8
+
+**Decision.** Environment management via `uv`. Python 3.10 (system default; reproducible across mewtwo and CI). PyTorch 2.11.0+cu128 (already installed, works on RTX 5070 sm_120).
+
+**Rationale.** RTX 5070 is Blackwell sm_120 — many libraries do not yet ship wheels for it. The installed PyTorch build works; changing Python or CUDA versions risks losing that. `uv` is faster and less surprising than conda or poetry for a pure-Python project that shells out to a CMake-built CUDA extension.
+
+**Alternatives considered.** conda (slower, heavier), poetry (slower resolver), system pip (less reproducible).
+
+---
+
+## 2026-04-12 — No SLAM; consume external poses
+
+**Decision.** The pipeline consumes camera poses from dataset metadata, recorded bags, or an external localization stack. We do not build or embed a SLAM component.
+
+**Rationale.** SLAM is an entire project of its own. Grounding quality is bounded by pose quality; we keep that variable external and auditable.
+
+**Alternatives considered.** Integrating ORB-SLAM3 or a learned VO — rejected for scope.
+
+---

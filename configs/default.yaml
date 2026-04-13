@@ -1,0 +1,45 @@
+# Default config.
+# Scene-specific YAMLs (configs/replica_room0.yaml, configs/scannet_0001.yaml)
+# override only what they need by inheriting this tree.
+
+dataset:
+  name: replica
+  root: ~/data/replica
+  scene: room_0
+  max_frames: null  # null = all
+  stride: 1
+
+camera:
+  # Replica stores depth as uint16 * 6553.5 per meter in some dumps, or 1000 in others.
+  # Override per-scene if the loader does not infer it.
+  depth_scale: 6553.5
+  depth_trunc_m: 6.0
+
+mapping:
+  voxel_size_m: 0.02
+  truncation_distance_m: 0.1  # 5 * voxel_size_m
+  hash_capacity: 1048576      # 2^20 active blocks cap
+  block_size: 8                # 8^3 voxels per block
+  backend: reference           # or: cuda
+  device: cuda:0
+  store_color: true
+  store_features: true
+  feature_dim: 512             # matches OpenCLIP ViT-B/16
+
+semantics:
+  model: ViT-B-16
+  pretrained: laion2b_s34b_b88k
+  mode: global
+  batch_size: 16
+  device: cuda:0
+  dtype: fp16
+
+grounding:
+  top_k: 5
+  score_threshold: 0.22
+  cluster_eps_vox: 2
+  min_cluster_voxels: 8
+
+logging:
+  level: INFO
+  rich_tracebacks: true

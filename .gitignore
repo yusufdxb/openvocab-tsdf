@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.egg
+build/
+dist/
+.coverage
+htmlcov/
+
+# Virtualenvs
+.venv/
+venv/
+.python-version.local
+
+# uv
+.uv/
+
+# CUDA build artifacts
+*.o
+*.cubin
+*.ptx
+*.fatbin
+*.so
+third_party/build/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Notebooks
+notebooks/scratch/
+
+# Datasets
+data/
+datasets/
+!src/openvocab_tsdf/data/
+
+# Benchmarks: keep result JSONs, ignore scratch
+benchmarks/results/*.tmp.json
+benchmarks/results/*.log
+
+# Model weights
+models/
+!src/openvocab_tsdf/semantics/models/
+
+# Outputs
+outputs/
+logs/
+runs/
+wandb/
+*.ply
+*.pcd
+*.ckpt
+*.pth
+!tests/**/*.ply
+
+# Secrets
+.env
+.env.*
+!.env.example
