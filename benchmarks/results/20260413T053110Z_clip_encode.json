@@ -1,0 +1,32 @@
+{
+  "name": "clip_encode",
+  "timestamp": "2026-04-13T05:31:04+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "batch": 16,
+    "images": 128,
+    "warmup": 1,
+    "repeats": 3
+  },
+  "runs": [
+    {
+      "backend": "pytorch_fp16",
+      "times_s": [
+        0.1011584629995923,
+        0.09166654500222648,
+        0.09023691500260611
+      ],
+      "fps_mean": 1356.5936241943682,
+      "fps_min": 1265.3414870539884,
+      "fps_max": 1418.4882095792311
+    },
+    {
+      "backend": "tensorrt_fp16",
+      "error": "ConversionError('Failed to decompose the FX graph for ONNX compatibility. \\x1b[96mThis is step 2/3\\x1b[0m of exporting the model to ONNX. Next steps:\\n- Create an issue in the PyTorch GitHub repository against the \\x1b[96m*torch.export*\\x1b[0m component and attach the full error stack as well as reproduction scripts.\\n- Create an error report with `torch.onnx.export(..., report=True)`, and save the ExportedProgram as a pt2 file. Create an issue in the PyTorch GitHub repository against the \\x1b[96m*onnx*\\x1b[0m component. Attach the error report and the pt2 model.\\n\\n## Exception summary\\n\\n<class \\'ValueError\\'>: Cannot view a tensor with shape torch.Size([197, s77, 12, 64]) and strides (768, 151296, 64, 1) as a tensor with shape (197*s77, 768)!\\n\\nWhile executing %view_9 : [num_users=1] = call_function[target=torch.ops.aten.view.default](args = (%permute_1, [%mul_100, 768]), kwargs = {})\\nOriginal traceback:\\nFile \"/home/yusuf/Projects/personal/openvocab-tsdf/src/openvocab_tsdf/semantics/trt_encoder.py\", line 52, in forward\\n    f = self.visual(x)\\n  File \"/home/yusuf/Projects/personal/openvocab-tsdf/.venv/lib/python3.10/site-packages/open_clip/transformer.py\", line 909, in forward\\n    x = self.transformer(x)\\n  File \"/home/yusuf/Projects/personal/openvocab-tsdf/.venv/lib/python3.10/site-packages/open_clip/transformer.py\", line 572, in forward\\n    x = r(x, attn_mask=attn_mask)\\n  File \"/home/yusuf/Projects/personal/openvocab-tsdf/.venv/lib/python3.10/site-packages/open_clip/transformer.py\", line 298, in forward\\n    x = q_x + self.ls_1(self.attention(q_x=self.ln_1(q_x), k_x=k_x, v_x=v_x, attn_mask=attn_mask))\\n  File \"/home/yusuf/.local/lib/python3.10/site-packages/torch/nn/modules/activation.py\", line 1492, in forward\\n    attn_output, attn_output_weights = F.multi_head_attention_forward(\\nUse tlparse to see full graph. (https://github.com/pytorch/tlparse?tab=readme-ov-file#tlparse-parse-structured-pt2-logs)\\n\\n(Refer to the full stack trace above for more information.)')"
+    }
+  ]
+}

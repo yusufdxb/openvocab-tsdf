@@ -1,0 +1,32 @@
+{
+  "name": "clip_encode",
+  "timestamp": "2026-04-13T05:30:50+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "batch": 16,
+    "images": 128,
+    "warmup": 1,
+    "repeats": 3
+  },
+  "runs": [
+    {
+      "backend": "pytorch_fp16",
+      "times_s": [
+        0.10161556599996402,
+        0.09985829499782994,
+        0.09765173299820162
+      ],
+      "fps_mean": 1283.7417048476989,
+      "fps_min": 1259.6495304670677,
+      "fps_max": 1310.7806289762136
+    },
+    {
+      "backend": "tensorrt_fp16",
+      "error": "ModuleNotFoundError(\"No module named 'onnxscript'\")"
+    }
+  ]
+}
