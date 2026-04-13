@@ -63,7 +63,6 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
     is_sparse = bool(data["sparse"]) if "sparse" in data.files else False
     if is_sparse:
         dims = tuple(int(d) for d in data["dims"])
-        D = int(data["feature_dim"])
         slot = torch.from_numpy(data["voxel_slot"]).to(device)
         pool = torch.from_numpy(data["feat_pool"]).to(device)
         feat = None  # sparse path: scores computed via pool
