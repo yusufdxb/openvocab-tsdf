@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 
 class DatasetConfig(BaseModel):
-    name: Literal["replica", "scannet", "tum", "custom"] = "replica"
+    name: Literal["replica", "nice_slam_demo", "scannet", "tum", "custom"] = "replica"
     root: Path
     scene: str
     max_frames: int | None = None

@@ -20,17 +20,24 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 | 5. ROS 2 interface | ✅ **built & smoke-tested** | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` colcon-built, service `/openvocab/ground` returns ranked targets over DDS. |
 | 6. Polish + figures | 🟡 partial | README, decisions, synthetic demo, first eval baseline logged, heatmap PLY exporter done. Publishable real-data figures pending dataset download. |
 
-### Current numbers on a synthetic scene (RTX 5070, 12 GB)
+### Current numbers (RTX 5070, 12 GB)
 
+**Synthetic scene (3 primitives, 32 frames, 224×224):**
 - TSDF fuse, Triton backend: **4423 FPS**, 25 MB peak VRAM
 - TSDF fuse, reference backend: 1486 FPS, 68 MB peak VRAM
+- Grounding (global features, 0.1 m bbox slack): **hit@1 = 33 %, hit@5 = 100 %**, mean top-1 L2 = 0.61 m, 50 ms per query
 - End-to-end grounding query (text encode + voxel scan + cluster): **~50 ms**
 - ROS 2 service `/openvocab/ground` — DDS roundtrip returns ranked targets in well under a second
-- Synthetic-scene grounding (global features, 3 queries, 0.1 m bbox slack): **hit@1 = 33 %, hit@5 = 100 %**, mean top-1 L2 = 0.61 m, 50 ms per query
-- CLIP image encode (ViT-B/16 @ 224, RTX 5070 fp16): PyTorch **1280 FPS**, TensorRT **1414 FPS** (+10 %). Engine export + bench in `benchmarks/bench_clip_encode.py`.
-- Patch-feature mode runs end-to-end and produces per-query heatmaps; precise localization gating moves to real-data eval (synthetic rendering is out of distribution for CLIP)
 
-Real-dataset numbers (Replica / ScanNet) land once the dataset download completes — see `scripts/download_datasets.sh`.
+**Real scene (NICE-SLAM demo — 500 RGB-D frames @ 640×480, 1.2 M voxels at 6 cm):**
+- Encode + fuse (patch-mode CLIP ViT-B/16 + MaskCLIP lift): **≈1.8 s end-to-end** (CLIP image encode 0.93 s, feature fusion 0.87 s)
+- Reference backend geometry fuse: 79.6 FPS at native 640×480, mesh 25.1 k vertices / 50.4 k triangles
+- Query latency: <100 ms per free-form prompt against the 1.2 M-voxel feature map
+- Per-query heatmap PLYs: 19.4 k surface points each (`outputs/heatmaps_demo/*.ply`)
+
+**CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
+- PyTorch: **1280 FPS**
+- TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.
 
 See [`docs/architecture.md`](docs/architecture.md) for the full plan, performance targets, and what is explicitly cut. See [`docs/decisions.md`](docs/decisions.md) for the architectural-decision log. See [`AGENTS.md`](AGENTS.md) for the rules that govern agent work in this repository.
 
