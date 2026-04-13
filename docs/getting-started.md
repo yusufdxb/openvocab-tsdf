@@ -81,6 +81,28 @@ openvocab-tsdf ground   --map outputs/map.npz --query "chair near the window" --
 
 Summary prints to stdout; a machine-readable JSON is written to `benchmarks/results/`.
 
-## 7. ROS 2 (optional, Phase 5)
+## 7. ROS 2 (Phase 5)
 
-See `ros2_ws/README.md`. Requires a sourced ROS 2 Humble installation.
+See `ros2_ws/README.md`. Requires a sourced ROS 2 Humble installation. Build with `colcon build --symlink-install` and query the node with `ros2 service call /openvocab/ground ...`.
+
+## 8. Troubleshooting
+
+**`libcudnn.so.9: cannot open shared object file` or `CUDNN_STATUS_NOT_INITIALIZED`.**
+Another Python package (often one that lists `torch` as a dep without pinning the CUDA variant) may silently pull in `nvidia-cudnn-cu13` alongside the cu12 build PyTorch actually loads, leaving you with a mismatched or missing cuDNN. Fix:
+
+```bash
+# remove the cu13 variant (safe if torch was built against cu128)
+python3 -m pip uninstall -y nvidia-cudnn-cu13
+# re-install the cu12 variant torch wants (also safe)
+python3 -m pip install --user --force-reinstall nvidia-cudnn-cu12
+```
+
+**`ros2 run` of the node raises `ModuleNotFoundError: No module named 'openvocab_tsdf'`.**
+The installed entry-point is executed by the *system* `/usr/bin/python3`, which does not see the uv venv. Layer PYTHONPATH at launch:
+
+```bash
+source /opt/ros/humble/setup.bash
+source $PROJECT/ros2_ws/install/setup.bash
+source $PROJECT/.venv/bin/activate
+export PYTHONPATH="$PROJECT/src:$PROJECT/.venv/lib/python3.10/site-packages:$PYTHONPATH"
+```
