@@ -22,6 +22,7 @@ setup(
     entry_points={
         "console_scripts": [
             "grounding_node = openvocab_tsdf_node.grounding_node:main",
+            "live_rgbd_publisher = openvocab_tsdf_node.live_rgbd_publisher:main",
         ],
     },
 )
