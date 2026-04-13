@@ -56,10 +56,22 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
     device = spec.get("device", "cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = spec.get("dtype", "fp16" if torch.cuda.is_available() else "fp32")
 
-    feat = torch.from_numpy(data["feat"]).to(device)
     weight = torch.from_numpy(data["weight"]).to(device)
     origin = data["origin"]
     voxel_size = float(data["voxel_size"])
+
+    is_sparse = bool(data["sparse"]) if "sparse" in data.files else False
+    if is_sparse:
+        dims = tuple(int(d) for d in data["dims"])
+        D = int(data["feature_dim"])
+        slot = torch.from_numpy(data["voxel_slot"]).to(device)
+        pool = torch.from_numpy(data["feat_pool"]).to(device)
+        feat = None  # sparse path: scores computed via pool
+    else:
+        feat = torch.from_numpy(data["feat"]).to(device)
+        slot = None
+        pool = None
+        dims = tuple(feat.shape[:3])
 
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(
@@ -86,21 +98,49 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
         else:
             q = encoder.encode_texts([q_text])[0]
             neg_e = None
-        results = rank_query(
-            voxel_feats=feat,
-            voxel_weights=weight,
-            text_embedding=q,
-            origin=origin,
-            voxel_size=voxel_size,
-            min_weight=float(spec.get("min_weight", 1.0)),
-            score_threshold=spec.get("score_threshold"),
-            top_percentile=spec.get("top_percentile", 0.02),
-            cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
-            min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
-            top_k=int(spec.get("top_k", 5)),
-            scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
-            neg_text_embedding=neg_e,
-        )
+        if is_sparse:
+            # Sparse: score only the observed voxels via the pool, scatter into
+            # a dense (Nx,Ny,Nz) scores tensor (22 MB at 5.6M voxels).
+            scores_flat = torch.full(
+                (dims[0] * dims[1] * dims[2],), -1e4, dtype=torch.float32, device=device
+            )
+            alloc = slot.view(-1) >= 0
+            pool_scores = pool @ q
+            if neg_e is not None:
+                pool_scores = pool_scores - pool @ neg_e
+            scores_flat[alloc] = pool_scores[slot.view(-1)[alloc].long()]
+            scores_vol = scores_flat.view(*dims)
+            results = rank_query(
+                voxel_feats=None,
+                voxel_weights=weight,
+                text_embedding=None,
+                precomputed_scores=scores_vol,
+                origin=origin,
+                voxel_size=voxel_size,
+                min_weight=float(spec.get("min_weight", 1.0)),
+                score_threshold=spec.get("score_threshold"),
+                top_percentile=spec.get("top_percentile", 0.02),
+                cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
+                min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
+                top_k=int(spec.get("top_k", 5)),
+                scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
+            )
+        else:
+            results = rank_query(
+                voxel_feats=feat,
+                voxel_weights=weight,
+                text_embedding=q,
+                origin=origin,
+                voxel_size=voxel_size,
+                min_weight=float(spec.get("min_weight", 1.0)),
+                score_threshold=spec.get("score_threshold"),
+                top_percentile=spec.get("top_percentile", 0.02),
+                cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
+                min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
+                top_k=int(spec.get("top_k", 5)),
+                scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
+                neg_text_embedding=neg_e,
+            )
         latency = time.perf_counter() - t0
 
         slack = float(spec.get("bbox_slack_m", 0.1))

@@ -1,0 +1,59 @@
+# Replica office0 — hand-annotated ground-truth eval spec (see replica_room0.yaml
+# for annotation methodology). Derived from `scripts/inspect_replica_mesh.py`:
+#   - floor ≈ z=-1.14, ceiling ≈ z=+1.73 (both from horizontal-surface histogram)
+#   - scene bbox: x∈[-2.01, +2.39], y∈[-3.15, +1.86]
+#
+# Interior density layout (from the mesh density map):
+#   - south wall along y≈-3 (dense line)
+#   - west wall along x≈-1.8
+#   - object column along x∈[+2.0, +2.4] (east side — likely bookshelf/cabinet)
+#   - object cluster at x∈[-0.3, +1.2], y∈[-2.5, -0.5] (desk region)
+#   - upper cluster at x∈[-1.0, +0.5], y∈[+1.2, +1.55] (another desk / couch)
+
+model: ViT-B-16
+pretrained: laion2b_s34b_b88k
+device: cuda:0
+dtype: fp16
+
+top_percentile: 0.005
+cluster_eps_vox: 2
+min_cluster_voxels: 20
+top_k: 5
+bbox_slack_m: 0.2
+
+cases:
+  # structural
+  - query: "the floor"
+    bbox_min: [-2.01, -3.15, -1.20]
+    bbox_max: [2.39, 1.86, -1.00]
+    kind: structural
+  - query: "the ceiling"
+    bbox_min: [-2.01, -3.15, 1.65]
+    bbox_max: [2.39, 1.86, 1.80]
+    kind: structural
+  - query: "a wall"
+    bbox_min: [-2.01, -3.15, -1.0]
+    bbox_max: [2.39, -2.7, 1.7]       # south wall y≈-3
+    kind: structural
+
+  # objects
+  - query: "a desk"
+    bbox_min: [-0.5, -2.5, -1.15]
+    bbox_max: [1.3, -0.5, -0.3]
+    kind: object
+  - query: "a chair"
+    bbox_min: [-0.5, -2.0, -1.15]
+    bbox_max: [1.3, -0.3, -0.3]
+    kind: object
+  - query: "a bookshelf"
+    bbox_min: [1.9, -3.15, -1.15]
+    bbox_max: [2.39, 1.86, 1.4]       # east column
+    kind: object
+  - query: "a sofa"
+    bbox_min: [-1.0, 0.8, -1.15]
+    bbox_max: [0.5, 1.6, -0.3]
+    kind: object
+  - query: "a laptop"
+    bbox_min: [-0.3, -2.0, -1.0]
+    bbox_max: [1.0, -0.8, -0.3]
+    kind: loose

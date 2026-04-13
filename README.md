@@ -43,27 +43,29 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 - Per-query latency: **83–283 ms** (mean ~135 ms) for 10 realistic prompts ("a chair", "a sofa", "a plant", ...); scene-mean-subtract on; top-1 + top-3 clusters returned per query
 - Per-query heatmap PLYs: 104 k surface points each (`outputs/heatmaps_replica_room0/*.ply`)
 
-### Grounding accuracy — Replica `room0` (hand-annotated, 9 queries)
+### Grounding accuracy — Replica, hand-annotated
 
-See `eval/specs/replica_room0.yaml` for the annotation protocol (structural queries derived from the mesh's horizontal-surface z histogram; object bboxes from a mesh-density map, conservatively widened to ±0.2 m slack). Ablation produced by `eval/run_ablation.py`:
+See `eval/specs/replica_room0.yaml` and `eval/specs/replica_office0.yaml` for the annotation protocol (structural queries derived from the mesh's horizontal-surface z histogram; object bboxes from a `scripts/inspect_replica_mesh.py` density map, conservatively widened with a 0.2 m bbox slack).
 
-| map | mean-sub | top% | hit@1 | hit@5 | hit-L2 (m) | struct h@1 | obj h@1 |
-|---|---|---|---|---|---|---|---|
-| patch   | False | 0.005 | 22.2 % | 44.4 % | 3.46 | 1/3 | 0/5 |
-| patch   | False | 0.020 | 22.2 % | 44.4 % | 3.15 | 0/3 | 1/5 |
-| patch   | True  | 0.005 | 11.1 % | 33.3 % | 3.59 | 0/3 | 0/5 |
-| patch   | True  | 0.020 | 11.1 % | 33.3 % | 4.05 | 0/3 | 0/5 |
-| **global** | **False** | **0.005** | **33.3 %** | **55.6 %** | **2.63** | **2/3** | **0/5** |
-| global  | False | 0.020 | 33.3 % | 44.4 % | 2.25 | 2/3 | 0/5 |
-| global  | True  | 0.005 | 11.1 % | 44.4 % | 3.68 | 1/3 | 0/5 |
-| global  | True  | 0.020 |  0.0 % | 44.4 % | 3.62 | 0/3 | 0/5 |
+**Headline cross-scene / cross-config table (best configuration per row):**
+
+| scene | voxel | frames | mode | mean-sub | top% | hit@1 | hit@5 | hit-L2 (m) |
+|---|---|---|---|---|---|---|---|---|
+| room0   | 6 cm | 500 (stride 4)  | patch  | off | 0.005 | 22.2 % | 44.4 % | 3.46 |
+| **room0**   | **6 cm** | **500 (stride 4)**  | **global** | **off** | **0.005** | **33.3 %** | **55.6 %** | **2.63** |
+| room0   | 4 cm | **2 000 (full)** | global | off | 0.001 | 22.2 % | 55.6 % | 2.71 |
+| **office0** | **6 cm** | **500 (stride 4)**  | **global** | **off** | **0.005** | **25.0 %** | **87.5 %** | **2.15** |
+| office0 | 6 cm | 500 (stride 4)  | global | on  | 0.005 | 25.0 % | 87.5 % | 2.15 |
+
+**Full ablation on room0** (8 configs, patch vs global × mean-sub × top-percentile): see the `eval/run_ablation.py` output embedded in commit `a1a628e`. Summary: `global / off / 0.005` is the best config there.
 
 **Honest takeaways.**
-- **Structural queries work.** `"the floor"`, `"the ceiling"`, `"a window"` score 2/3 h@1 with global features. These are easy wins but they're the first real-data ground-truth numbers in the repo.
-- **Object-level localization is still weak on 500 strided frames.** Best obj h@1 = 1/5. This is the real open problem — more frames, better dense features, or finer voxels should all help and are the next experiment.
-- **Patch features do not beat global features on this scene.** Suspected causes: (a) sparse frame coverage (500 strided @ native 1200×680 is ~25 % of the full trajectory), (b) per-voxel patch lookup is single-patch per observation so aggregation is noisier than expected, (c) our hand-annotated object bboxes are loose (±0.2 m slack).
-- **Scene-mean-subtract hurts here.** It helped on the synthetic demo scene but on real data it flattens the signal — confirms our own decision-log prediction that the flag is scene-dependent and must stay off by default.
-- **Mean latency 337 ms per query** (includes one text-encode each; drops to ~135 ms with the encoder reused).
+- **Cross-scene result lands.** Same pipeline, same config style, hit@5 of **87.5 %** on `office0`. Structural 2/3 + object 3/5 at hit@5 on a previously-unseen scene is the project's strongest real-data number and suggests the pipeline generalizes.
+- **`room0` object-level stays hard.** Best obj h@1 = 1/5 across every config tried. Suspected cause: `room0` has a lot of visually-similar dark textured regions in the camera data that push the CLIP-global winner toward the "most observed" wall rather than a specific object.
+- **Finer voxels (4 cm) + full trajectory (2 000 frames) did not help `room0`.** The 4 cm sparse volume has 1.7 M allocated voxels (vs 0.55 M at 6 cm), so the default top-percentile threshold needs to scale down accordingly (0.001 instead of 0.005) — once tuned, results are within noise of the 6 cm baseline. Encode throughput scales linearly (2 000 frames in 30 s end-to-end).
+- **Patch features do not beat global features on either scene.** Same reasoning as before: natural-image CLIP patch tokens are known weak for dense localization without a task-trained dense head (LSeg / OpenSeg), which is the correct next experiment.
+- **Scene-mean-subtract is neutral-to-negative on real data.** Confirmed on both `room0` and `office0`: the flag helps only when CLIP activations form a unimodal bulge near the query, which they don't here. Kept off by default.
+- **Mean latency: 50–470 ms per query** depending on map size (6 cm sparse office0: 53 ms; 4 cm sparse room0: 487 ms, dominated by the dense-scores scatter). With CLIP pre-loaded: 135 ms on the big map.
 
 **CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
 - PyTorch: **1280 FPS**

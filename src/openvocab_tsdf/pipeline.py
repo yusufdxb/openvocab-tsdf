@@ -95,6 +95,27 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
             device=m.device,
         )
         return TritonTSDF(tri_cfg)
+    if m.backend == "sparse_feature":
+        from openvocab_tsdf.mapping.sparse_reference import (
+            SparseFeatureTSDF,
+            SparseFeatureTSDFConfig,
+        )
+
+        return SparseFeatureTSDF(
+            SparseFeatureTSDFConfig(
+                voxel_size_m=m.voxel_size_m,
+                truncation_distance_m=m.truncation_distance_m,
+                bounds_min=bmin,
+                bounds_max=bmax,
+                max_weight=m.max_weight,
+                store_color=m.store_color,
+                feature_dim=m.feature_dim,
+                initial_feat_capacity=m.initial_feat_capacity,
+                max_feat_capacity=m.max_feat_capacity,
+                feat_update_backend=m.feat_update_backend,
+                device=m.device,
+            )
+        )
     raise NotImplementedError(f"mapping backend '{m.backend}' not implemented")
 
 
@@ -109,19 +130,28 @@ def encode_and_fuse(
     frames: list[RGBDFrame] | RGBDDataset,
     map_out: Path,
 ) -> dict:
-    """Encode each frame with OpenCLIP and fuse geometry + global features.
+    """Encode each frame with OpenCLIP and fuse geometry + features.
 
-    Features are stored in the reference backend only (Phase 2 limitation). The
-    Triton backend will grow a feature path in Phase 2b.
+    Global-mode features work with both the dense `reference` backend and the
+    `sparse_feature` backend. Patch mode only works with `reference` today
+    (sparse patch aggregation is future work).
     """
+    from openvocab_tsdf.mapping.sparse_reference import SparseFeatureTSDF
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
-    if cfg.mapping.backend != "reference":
-        log.warning("semantics require the reference backend; forcing reference for this run")
     m = cfg.mapping
-    # build a reference volume regardless of configured backend
+    mode = cfg.semantics.mode
+    if m.backend not in ("reference", "sparse_feature"):
+        log.warning("backend %r does not support feature storage; forcing reference", m.backend)
+        m.backend = "reference"  # fall through
+    if mode == "patch" and m.backend == "sparse_feature":
+        log.warning("sparse_feature backend does not support patch mode yet; forcing global")
+        mode = "global"
+
+    # Build the volume using `build_tsdf` (shared path with fuse)
+    # but force store_features on.
+    m.store_features = True
     if m.bounds_min is None or m.bounds_max is None:
-        # caller passed a plain list of frames; synthesize a simple bounds fit
         if isinstance(frames, list):
 
             class _S:
@@ -131,22 +161,44 @@ def encode_and_fuse(
             bmin, bmax = _auto_bounds(_S(), m.auto_bounds_radius_m)
         else:
             bmin, bmax = _auto_bounds(frames, m.auto_bounds_radius_m)
-    else:
-        bmin, bmax = tuple(m.bounds_min), tuple(m.bounds_max)
+        m.bounds_min = bmin
+        m.bounds_max = bmax
 
-    # force features on, force reference backend
-    ref_cfg = ReferenceTSDFConfig(
-        voxel_size_m=m.voxel_size_m,
-        truncation_distance_m=m.truncation_distance_m,
-        bounds_min=bmin,
-        bounds_max=bmax,
-        max_weight=m.max_weight,
-        store_color=m.store_color,
-        store_features=True,
-        feature_dim=m.feature_dim,
-        device=m.device,
-    )
-    vol = ReferenceTSDF(ref_cfg)
+    # build the volume using the selected backend (but only reference +
+    # sparse_feature reach this path)
+    if m.backend == "sparse_feature":
+        from openvocab_tsdf.mapping.sparse_reference import (
+            SparseFeatureTSDFConfig,
+        )
+
+        vol = SparseFeatureTSDF(
+            SparseFeatureTSDFConfig(
+                voxel_size_m=m.voxel_size_m,
+                truncation_distance_m=m.truncation_distance_m,
+                bounds_min=tuple(m.bounds_min),
+                bounds_max=tuple(m.bounds_max),
+                max_weight=m.max_weight,
+                store_color=m.store_color,
+                feature_dim=m.feature_dim,
+                initial_feat_capacity=m.initial_feat_capacity,
+                max_feat_capacity=m.max_feat_capacity,
+                feat_update_backend=m.feat_update_backend,
+                device=m.device,
+            )
+        )
+    else:
+        ref_cfg = ReferenceTSDFConfig(
+            voxel_size_m=m.voxel_size_m,
+            truncation_distance_m=m.truncation_distance_m,
+            bounds_min=tuple(m.bounds_min),
+            bounds_max=tuple(m.bounds_max),
+            max_weight=m.max_weight,
+            store_color=m.store_color,
+            store_features=True,
+            feature_dim=m.feature_dim,
+            device=m.device,
+        )
+        vol = ReferenceTSDF(ref_cfg)
 
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(
@@ -165,7 +217,6 @@ def encode_and_fuse(
     frame_list = list(frames) if not isinstance(frames, list) else frames
     colors = [f.color for f in frame_list]
 
-    mode = cfg.semantics.mode
     t0 = time.perf_counter()
     if mode == "global":
         img_feats = encoder.encode_images(colors, batch_size=cfg.semantics.batch_size)
@@ -191,23 +242,36 @@ def encode_and_fuse(
         torch.cuda.synchronize()
     fuse_s = time.perf_counter() - t0
 
-    # save map
+    # save map — sparse backends save a compact pool + slot table, dense backends
+    # save the full dense feature array.
     map_out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        map_out,
-        tsdf=vol.tsdf.cpu().numpy(),
-        weight=vol.weight.cpu().numpy(),
-        color=vol.color.cpu().numpy() if vol.color is not None else np.zeros(0),
-        feat=vol.feat.cpu().numpy(),
-        origin=vol.origin.cpu().numpy(),
-        voxel_size=np.float32(vol.voxel_size_m),
-        truncation=np.float32(vol.truncation_distance_m),
-        dims=np.int64(vol.dims),
-        feature_dim=np.int64(encoder.feature_dim),
-        model=np.array(cfg.semantics.model, dtype=object),
-        pretrained=np.array(cfg.semantics.pretrained, dtype=object),
-        mode=np.array(mode, dtype=object),
-    )
+    save_kwargs = {
+        "tsdf": vol.tsdf.cpu().numpy(),
+        "weight": vol.weight.cpu().numpy(),
+        "color": vol.color.cpu().numpy() if vol.color is not None else np.zeros(0),
+        "origin": vol.origin.cpu().numpy(),
+        "voxel_size": np.float32(vol.voxel_size_m),
+        "truncation": np.float32(vol.truncation_distance_m),
+        "dims": np.int64(vol.dims),
+        "feature_dim": np.int64(encoder.feature_dim),
+        "model": np.array(cfg.semantics.model, dtype=object),
+        "pretrained": np.array(cfg.semantics.pretrained, dtype=object),
+        "mode": np.array(mode, dtype=object),
+    }
+    if isinstance(vol, SparseFeatureTSDF):
+        n = vol.num_allocated_feat_voxels
+        save_kwargs["sparse"] = np.bool_(True)
+        save_kwargs["feat_pool"] = vol._feat_pool[:n].cpu().numpy()
+        save_kwargs["voxel_slot"] = vol._voxel_slot.cpu().numpy()
+        log.info(
+            "saving sparse map: %d allocated voxels, %.1f MB pool",
+            n,
+            n * encoder.feature_dim * 4 / (1024**2),
+        )
+    else:
+        save_kwargs["sparse"] = np.bool_(False)
+        save_kwargs["feat"] = vol.feat.cpu().numpy()
+    np.savez_compressed(map_out, **save_kwargs)
 
     log.info(
         "encoded %d frames in %.2fs (%.1f FPS); fused features in %.2fs -> %s",
@@ -249,11 +313,23 @@ def ground_text(
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
     data = np.load(map_path, allow_pickle=True)
-    feat = torch.from_numpy(data["feat"]).to(device)
     weight = torch.from_numpy(data["weight"]).to(device)
     tsdf = torch.from_numpy(data["tsdf"]).to(device) if "tsdf" in data.files else None
     origin = data["origin"]
     voxel_size = float(data["voxel_size"])
+
+    is_sparse = bool(data["sparse"]) if "sparse" in data.files else False
+    if is_sparse:
+        dims = tuple(int(d) for d in data["dims"])
+        D = int(data["feature_dim"])
+        slot = torch.from_numpy(data["voxel_slot"]).to(device)
+        pool = torch.from_numpy(data["feat_pool"]).to(device)
+        feat = torch.zeros((dims[0] * dims[1] * dims[2], D), dtype=torch.float32, device=device)
+        alloc = slot.view(-1) >= 0
+        feat[alloc] = pool[slot.view(-1)[alloc].long()]
+        feat = feat.view(*dims, D)
+    else:
+        feat = torch.from_numpy(data["feat"]).to(device)
 
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)

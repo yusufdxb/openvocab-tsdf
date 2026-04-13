@@ -47,12 +47,13 @@ def _connected_components_3d(mask: np.ndarray, eps_vox: int = 1) -> np.ndarray:
 
 def rank_query(
     *,
-    voxel_feats: torch.Tensor,  # (Nx, Ny, Nz, D)
+    voxel_feats: torch.Tensor | None = None,  # (Nx, Ny, Nz, D)  — dense path
     voxel_weights: torch.Tensor,  # same leading shape
-    text_embedding: torch.Tensor,  # (D,), normalized
+    text_embedding: torch.Tensor | None = None,  # (D,), normalized — dense path
     origin: np.ndarray,  # (3,)
     voxel_size: float,
     voxel_tsdf: torch.Tensor | None = None,  # (Nx, Ny, Nz) — for surface filtering
+    precomputed_scores: torch.Tensor | None = None,  # (Nx,Ny,Nz) — sparse path
     min_weight: float = 1.0,
     score_threshold: float | None = 0.22,
     top_percentile: float | None = None,
@@ -83,13 +84,24 @@ def rank_query(
         CLIP has a broad baseline affinity for the query category and you
         want to isolate the specific adjective / noun head).
     """
-    if voxel_feats.ndim != 4:
-        raise ValueError(f"expected (Nx,Ny,Nz,D), got {tuple(voxel_feats.shape)}")
-
     with torch.no_grad():
-        scores = cosine_score(text_embedding, voxel_feats)  # (Nx,Ny,Nz)
-        if neg_text_embedding is not None:
-            scores = scores - cosine_score(neg_text_embedding, voxel_feats)
+        if precomputed_scores is not None:
+            scores = precomputed_scores
+            if scores.shape != tuple(voxel_weights.shape):
+                raise ValueError(
+                    f"precomputed_scores shape {scores.shape} must match voxel_weights "
+                    f"{voxel_weights.shape}"
+                )
+        else:
+            if voxel_feats is None or text_embedding is None:
+                raise ValueError(
+                    "either `precomputed_scores` or (`voxel_feats` + `text_embedding`) required"
+                )
+            if voxel_feats.ndim != 4:
+                raise ValueError(f"expected (Nx,Ny,Nz,D), got {tuple(voxel_feats.shape)}")
+            scores = cosine_score(text_embedding, voxel_feats)
+            if neg_text_embedding is not None:
+                scores = scores - cosine_score(neg_text_embedding, voxel_feats)
         observed = voxel_weights >= min_weight
         if surface_only and voxel_tsdf is not None:
             observed = observed & (voxel_tsdf.abs() <= surface_tsdf_abs_max)

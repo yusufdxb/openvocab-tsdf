@@ -31,7 +31,11 @@ class MappingConfig(BaseModel):
     truncation_distance_m: float = 0.1
     hash_capacity: int = 1 << 20
     block_size: int = 8
-    backend: Literal["reference", "triton", "cuda"] = "reference"
+    backend: Literal["reference", "sparse_feature", "triton", "cuda"] = "reference"
+    # sparse-feature backend only
+    feat_update_backend: Literal["pytorch", "triton"] = "triton"
+    initial_feat_capacity: int = 65_536
+    max_feat_capacity: int = 8_000_000
     device: str = "cuda:0"
     store_color: bool = True
     store_features: bool = True
