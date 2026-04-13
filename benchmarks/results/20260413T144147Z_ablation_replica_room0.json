@@ -1,0 +1,234 @@
+[
+  {
+    "map": "patch",
+    "mean_sub": false,
+    "top_pct": 0.005,
+    "num_cases": 9,
+    "hit@1": 0.2222222222222222,
+    "hit@5": 0.4444444444444444,
+    "mean_top1_l2_m": 3.4772644643098483,
+    "mean_top1_l2_m_hit_only": 3.460487052304416,
+    "mean_latency_s": 0.36410526433206136,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 1,
+        "hit5": 2
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 1,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 11.92
+  },
+  {
+    "map": "patch",
+    "mean_sub": false,
+    "top_pct": 0.02,
+    "num_cases": 9,
+    "hit@1": 0.2222222222222222,
+    "hit@5": 0.4444444444444444,
+    "mean_top1_l2_m": 2.884235662153635,
+    "mean_top1_l2_m_hit_only": 3.147715129103393,
+    "mean_latency_s": 0.3956295070012048,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 0,
+        "hit5": 0
+      },
+      "object": {
+        "n": 5,
+        "hit1": 1,
+        "hit5": 3
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 1,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 12.12
+  },
+  {
+    "map": "patch",
+    "mean_sub": true,
+    "top_pct": 0.005,
+    "num_cases": 9,
+    "hit@1": 0.1111111111111111,
+    "hit@5": 0.3333333333333333,
+    "mean_top1_l2_m": 3.5828936390206962,
+    "mean_top1_l2_m_hit_only": 3.5911087254276293,
+    "mean_latency_s": 0.33052548088906203,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 1,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 11.53
+  },
+  {
+    "map": "patch",
+    "mean_sub": true,
+    "top_pct": 0.02,
+    "num_cases": 9,
+    "hit@1": 0.1111111111111111,
+    "hit@5": 0.3333333333333333,
+    "mean_top1_l2_m": 3.175293086472489,
+    "mean_top1_l2_m_hit_only": 4.047419866438162,
+    "mean_latency_s": 0.374649012000494,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 0,
+        "hit5": 0
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 2
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 1,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 11.91
+  },
+  {
+    "map": "global",
+    "mean_sub": false,
+    "top_pct": 0.005,
+    "num_cases": 9,
+    "hit@1": 0.3333333333333333,
+    "hit@5": 0.5555555555555556,
+    "mean_top1_l2_m": 3.801553132625696,
+    "mean_top1_l2_m_hit_only": 2.6250534311273697,
+    "mean_latency_s": 0.09834366988878981,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 2,
+        "hit5": 3
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 1,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 9.11
+  },
+  {
+    "map": "global",
+    "mean_sub": false,
+    "top_pct": 0.02,
+    "num_cases": 9,
+    "hit@1": 0.3333333333333333,
+    "hit@5": 0.4444444444444444,
+    "mean_top1_l2_m": 2.583975511132752,
+    "mean_top1_l2_m_hit_only": 2.2456073891705017,
+    "mean_latency_s": 0.10403525400033686,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 2,
+        "hit5": 2
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 1,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 9.21
+  },
+  {
+    "map": "global",
+    "mean_sub": true,
+    "top_pct": 0.005,
+    "num_cases": 9,
+    "hit@1": 0.1111111111111111,
+    "hit@5": 0.4444444444444444,
+    "mean_top1_l2_m": 3.7013282461031967,
+    "mean_top1_l2_m_hit_only": 3.678818684908313,
+    "mean_latency_s": 0.1000350472216572,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 1,
+        "hit5": 2
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 0,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 9.15
+  },
+  {
+    "map": "global",
+    "mean_sub": true,
+    "top_pct": 0.02,
+    "num_cases": 9,
+    "hit@1": 0.0,
+    "hit@5": 0.4444444444444444,
+    "mean_top1_l2_m": 3.222304428483072,
+    "mean_top1_l2_m_hit_only": 3.6195098975601194,
+    "mean_latency_s": 0.10459005155522998,
+    "per_kind": {
+      "structural": {
+        "n": 3,
+        "hit1": 0,
+        "hit5": 2
+      },
+      "object": {
+        "n": 5,
+        "hit1": 0,
+        "hit5": 1
+      },
+      "loose": {
+        "n": 1,
+        "hit1": 0,
+        "hit5": 1
+      }
+    },
+    "wall_time_s": 9.21
+  }
+]

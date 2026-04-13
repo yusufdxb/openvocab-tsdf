@@ -140,11 +140,15 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
         vals = [c[key] for c in per_case if isinstance(c[key], (int, float))]
         return float(np.mean(vals)) if vals else 0.0
 
+    # hit-only L2: mean distance conditioned on at least a top-5 hit — this is
+    # the more informative localization number for cases the system can solve.
+    hit_l2 = [c["top1_centroid_l2_m"] for c in per_case if c["hit@5"]]
     summary = {
         "num_cases": len(cases),
         "hit@1": float(np.mean([c["hit@1"] for c in per_case])),
         "hit@5": float(np.mean([c["hit@5"] for c in per_case])),
         "mean_top1_l2_m": _mean("top1_centroid_l2_m"),
+        "mean_top1_l2_m_hit_only": float(np.mean(hit_l2)) if hit_l2 else float("nan"),
         "mean_latency_s": _mean("latency_s"),
     }
 

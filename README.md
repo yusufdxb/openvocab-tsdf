@@ -41,6 +41,28 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 - Per-query latency: **83–283 ms** (mean ~135 ms) for 10 realistic prompts ("a chair", "a sofa", "a plant", ...); scene-mean-subtract on; top-1 + top-3 clusters returned per query
 - Per-query heatmap PLYs: 104 k surface points each (`outputs/heatmaps_replica_room0/*.ply`)
 
+### Grounding accuracy — Replica `room0` (hand-annotated, 9 queries)
+
+See `eval/specs/replica_room0.yaml` for the annotation protocol (structural queries derived from the mesh's horizontal-surface z histogram; object bboxes from a mesh-density map, conservatively widened to ±0.2 m slack). Ablation produced by `eval/run_ablation.py`:
+
+| map | mean-sub | top% | hit@1 | hit@5 | hit-L2 (m) | struct h@1 | obj h@1 |
+|---|---|---|---|---|---|---|---|
+| patch   | False | 0.005 | 22.2 % | 44.4 % | 3.46 | 1/3 | 0/5 |
+| patch   | False | 0.020 | 22.2 % | 44.4 % | 3.15 | 0/3 | 1/5 |
+| patch   | True  | 0.005 | 11.1 % | 33.3 % | 3.59 | 0/3 | 0/5 |
+| patch   | True  | 0.020 | 11.1 % | 33.3 % | 4.05 | 0/3 | 0/5 |
+| **global** | **False** | **0.005** | **33.3 %** | **55.6 %** | **2.63** | **2/3** | **0/5** |
+| global  | False | 0.020 | 33.3 % | 44.4 % | 2.25 | 2/3 | 0/5 |
+| global  | True  | 0.005 | 11.1 % | 44.4 % | 3.68 | 1/3 | 0/5 |
+| global  | True  | 0.020 |  0.0 % | 44.4 % | 3.62 | 0/3 | 0/5 |
+
+**Honest takeaways.**
+- **Structural queries work.** `"the floor"`, `"the ceiling"`, `"a window"` score 2/3 h@1 with global features. These are easy wins but they're the first real-data ground-truth numbers in the repo.
+- **Object-level localization is still weak on 500 strided frames.** Best obj h@1 = 1/5. This is the real open problem — more frames, better dense features, or finer voxels should all help and are the next experiment.
+- **Patch features do not beat global features on this scene.** Suspected causes: (a) sparse frame coverage (500 strided @ native 1200×680 is ~25 % of the full trajectory), (b) per-voxel patch lookup is single-patch per observation so aggregation is noisier than expected, (c) our hand-annotated object bboxes are loose (±0.2 m slack).
+- **Scene-mean-subtract hurts here.** It helped on the synthetic demo scene but on real data it flattens the signal — confirms our own decision-log prediction that the flag is scene-dependent and must stay off by default.
+- **Mean latency 337 ms per query** (includes one text-encode each; drops to ~135 ms with the encoder reused).
+
 **CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
 - PyTorch: **1280 FPS**
 - TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.

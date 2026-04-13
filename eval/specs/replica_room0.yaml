@@ -1,0 +1,79 @@
+# Replica room0 — hand-annotated ground-truth eval spec.
+#
+# The NICE-SLAM RGB-D dump does not ship semantic labels (upstream Meta
+# release does, via a separate form-gated download). Bboxes below were
+# derived from direct mesh inspection: floor/ceiling from the two strongest
+# horizontal-surface peaks in the z histogram, object bboxes from an
+# interior spatial density map projected onto the xy plane.
+#
+# Caveats:
+#   * Bboxes are conservatively wide (±0.3 m) since we are scoring on
+#     cluster centroid, not IoU.
+#   * "the floor" / "the ceiling" bboxes are *exact* plane locations from the
+#     mesh and function as a geometric sanity check.
+#   * Object classes are best-guess from the density map; some entries
+#     (e.g. "a lamp") may map to nearby objects. Treat this eval as
+#     relative-ordering rather than absolute accuracy.
+#
+# Regenerate/refine: `python scripts/inspect_replica_mesh.py --scene room0`.
+
+model: ViT-B-16
+pretrained: laion2b_s34b_b88k
+device: cuda:0
+dtype: fp16
+
+top_percentile: 0.005
+cluster_eps_vox: 2
+min_cluster_voxels: 20
+top_k: 5
+bbox_slack_m: 0.2
+
+cases:
+  # ---- Structural / geometry-derivable ground truth ----
+  - query: "the floor"
+    bbox_min: [-0.88, -1.19, -1.56]
+    bbox_max: [6.89, 3.51, -1.35]
+    kind: structural
+  - query: "the ceiling"
+    bbox_min: [-0.88, -1.19, 1.15]
+    bbox_max: [6.89, 3.51, 1.30]
+    kind: structural
+
+  # ---- Objects: hand-annotated from mesh density map ----
+  - query: "a sofa"
+    # Southern dense cluster, x in [3.0, 5.5], y in [0.2, 1.7]; seated height
+    bbox_min: [3.0, 0.0, -1.55]
+    bbox_max: [5.5, 1.7, -0.3]
+    kind: object
+  - query: "a bed"
+    # Dense cluster at y<-0.3, x in [3.0, 4.5]; bed height
+    bbox_min: [3.0, -1.19, -1.55]
+    bbox_max: [4.6, 0.0, -0.3]
+    kind: object
+  - query: "a table"
+    # Central-west dense spot, coffee-table height
+    bbox_min: [2.0, 0.2, -1.55]
+    bbox_max: [3.5, 2.3, -0.4]
+    kind: object
+  - query: "a chair"
+    # Interior chair region around (1.5, 0-1)
+    bbox_min: [1.0, -0.5, -1.55]
+    bbox_max: [2.5, 1.5, -0.3]
+    kind: object
+  - query: "a bookshelf"
+    # Eastern long column x in [5.5, 6.5], y in [0.5, 3.0]
+    bbox_min: [5.5, 0.2, -1.55]
+    bbox_max: [6.8, 3.0, 1.1]
+    kind: object
+  - query: "a window"
+    # Northern wall y > 3.0
+    bbox_min: [-0.88, 3.2, -0.5]
+    bbox_max: [6.89, 3.51, 1.1]
+    kind: structural
+
+  # ---- Additional "out-of-distribution" / negative checks ----
+  - query: "a tv"
+    # TV usually on the east or south wall at mid-height
+    bbox_min: [-0.88, -1.19, -0.5]
+    bbox_max: [6.89, 3.51, 0.7]
+    kind: loose
