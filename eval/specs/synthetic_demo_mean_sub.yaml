@@ -1,0 +1,24 @@
+# Same scene + queries as synthetic_demo.yaml but with scene_mean_subtract.
+# Use to measure the lift from the mean-subtract refinement on the same map.
+
+model: ViT-B-16
+pretrained: laion2b_s34b_b88k
+device: cuda:0
+dtype: fp16
+
+top_percentile: 0.02
+cluster_eps_vox: 1
+min_cluster_voxels: 4
+top_k: 5
+scene_mean_subtract: true
+
+cases:
+  - query: "a red ball"
+    bbox_min: [-0.25, -0.45, -0.25]
+    bbox_max: [0.25, 0.05, 0.25]
+  - query: "a blue bar"
+    bbox_min: [0.45, -0.45, -0.20]
+    bbox_max: [0.75, 0.35, 0.20]
+  - query: "green grass floor"
+    bbox_min: [-0.80, 0.15, -0.80]
+    bbox_max: [0.80, 0.45, 0.80]

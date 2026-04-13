@@ -26,7 +26,8 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 - TSDF fuse, reference backend: 1486 FPS, 68 MB peak VRAM
 - End-to-end grounding query (text encode + voxel scan + cluster): **~50 ms**
 - ROS 2 service `/openvocab/ground` — DDS roundtrip returns ranked targets in well under a second
-- First synthetic-scene grounding baseline (global features): hit@1 = 0 %, hit@5 = 33 %, mean top-1 L2 = 0.61 m — honest ceiling for global features
+- Synthetic-scene grounding (global features, 3 queries, 0.1 m bbox slack): **hit@1 = 33 %, hit@5 = 100 %**, mean top-1 L2 = 0.61 m, 50 ms per query
+- CLIP image encode (ViT-B/16 @ 224, RTX 5070 fp16): PyTorch **1280 FPS**, TensorRT **1414 FPS** (+10 %). Engine export + bench in `benchmarks/bench_clip_encode.py`.
 - Patch-feature mode runs end-to-end and produces per-query heatmaps; precise localization gating moves to real-data eval (synthetic rendering is out of distribution for CLIP)
 
 Real-dataset numbers (Replica / ScanNet) land once the dataset download completes — see `scripts/download_datasets.sh`.

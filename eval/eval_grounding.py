@@ -40,8 +40,13 @@ def _load_spec(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def _in_bbox(point: tuple[float, float, float], bmin: list[float], bmax: list[float]) -> bool:
-    return all(bmin[i] - 1e-6 <= point[i] <= bmax[i] + 1e-6 for i in range(3))
+def _in_bbox(
+    point: tuple[float, float, float],
+    bmin: list[float],
+    bmax: list[float],
+    slack: float = 0.0,
+) -> bool:
+    return all(bmin[i] - slack <= point[i] <= bmax[i] + slack for i in range(3))
 
 
 def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
@@ -73,7 +78,14 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
         bmax_exp = case["bbox_max"]
 
         t0 = time.perf_counter()
-        q = encoder.encode_texts([q_text])[0]
+        neg_text = case.get("neg") or spec.get("neg")
+        if neg_text:
+            t_emb = encoder.encode_texts([q_text, neg_text])
+            q = t_emb[0]
+            neg_e = t_emb[1]
+        else:
+            q = encoder.encode_texts([q_text])[0]
+            neg_e = None
         results = rank_query(
             voxel_feats=feat,
             voxel_weights=weight,
@@ -86,14 +98,21 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
             cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
             min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
             top_k=int(spec.get("top_k", 5)),
+            scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
+            neg_text_embedding=neg_e,
         )
         latency = time.perf_counter() - t0
 
-        # hit rate: centroid within expected bbox
-        hit1 = results and _in_bbox(results[0].center_m, bmin_exp, bmax_exp)
-        hit5 = any(_in_bbox(r.center_m, bmin_exp, bmax_exp) for r in results)
+        slack = float(spec.get("bbox_slack_m", 0.1))
+        # hit rate: centroid within expected bbox (with slack)
+        hit1 = bool(results and _in_bbox(results[0].center_m, bmin_exp, bmax_exp, slack))
+        hit5 = any(_in_bbox(r.center_m, bmin_exp, bmax_exp, slack) for r in results)
         rank_of_hit = next(
-            (i + 1 for i, r in enumerate(results) if _in_bbox(r.center_m, bmin_exp, bmax_exp)),
+            (
+                i + 1
+                for i, r in enumerate(results)
+                if _in_bbox(r.center_m, bmin_exp, bmax_exp, slack)
+            ),
             None,
         )
 

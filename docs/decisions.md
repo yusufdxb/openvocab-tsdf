@@ -52,6 +52,31 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
+## 2026-04-13 — Phase 4: TensorRT CLIP encoder as opt-in fast path
+
+**Decision.** Add a TensorRT-backed image encoder that serves the same (N, D) L2-normalized embeddings as the PyTorch reference. ONNX is exported from the OpenCLIP visual tower with the legacy tracing exporter (static batch), and a TRT fp16 engine is built on first call. The PyTorch encoder remains the reference.
+
+**Measured perf.** On RTX 5070 (12 GB), batch 16, 224×224, random inputs:
+- PyTorch fp16: 1280 FPS
+- TensorRT fp16: 1414 FPS (+10 %)
+- Parity: cosine similarity vs PyTorch > 0.98 on 8 fixed inputs.
+
+**Rationale.** Even a modest win matters when encoding thousands of frames in a real-dataset run, and TRT becomes a much bigger lever at ViT-L/14 or higher resolutions where the visual tower's forward dominates host-side work. The export pipeline is in place and the engine build is cached, so the next model upgrade is one command away.
+
+**Why static-batch ONNX.** PyTorch 2.11's dynamo-based exporter fails on CLIP's multi-head attention when the batch axis is marked dynamic (`Cannot view a tensor with shape [197, s77, 12, 64]...`). The legacy tracing exporter (`dynamo=False`) works fine for static shapes; we pad the last batch on the Python side to make the engine's fixed batch size acceptable. When dynamic-batch TRT engines become important (variable-batch live inference), revisit with either a newer PyTorch ONNX stack or a `trtexec`-based build off a dynamic-axis ONNX we author by hand.
+
+---
+
+## 2026-04-13 — Scoring refinements: scene-mean subtract + negative prompt
+
+**Decision.** `rank_query` grows two optional refinements that stack: (a) `scene_mean_subtract` subtracts the mean cosine score over observed surface voxels before thresholding, and (b) `neg_text_embedding` subtracts the cosine score of a negative-prompt vector (relative-prompt delta). Both default off.
+
+**When these help.** CLIP has a broad, scene-dependent similarity bias: many voxels score around a per-scene baseline. Mean subtraction isolates voxels that are *unusually* similar to the query, and negative prompts isolate specific adjectives from their category (e.g., "a red chair" vs "a chair"). On cluttered real-data maps these corrections are usually net positive.
+
+**Observed on synthetic.** On the 3-object rendered scene used in tests, with 0.1 m bbox slack: plain global features already hit@1 = 33 % / hit@5 = 100 %. Adding `scene_mean_subtract` drops to hit@1 = 0 % / hit@5 = 67 % because the three objects are approximately equi-baseline for CLIP — subtracting the mean hurts rather than helps. So both flags default off. Turn them on when CLIP's per-voxel score histogram is unimodal with a heavy mass near the query cosine, which is the typical real-data pattern.
+
+---
+
 ## 2026-04-13 — Phase 2b: patch features land with MaskCLIP trick + near-surface feature gating
 
 **Decision.** Patch-feature mode (`semantics.mode: patch`) now lifts CLIP per-patch tokens into voxels via (a) the MaskCLIP-style last-block attention bypass, (b) per-voxel patch lookup using the encoder's preprocess mapping (resize-shortest-edge + center-crop), and (c) a near-surface feature aggregation gate (features only accumulate on voxels whose normalized TSDF is in `[-1, 1]`). Rationale:

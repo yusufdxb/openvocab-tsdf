@@ -61,6 +61,8 @@ def rank_query(
     cluster_eps_vox: int = 2,
     min_cluster_voxels: int = 8,
     top_k: int = 5,
+    scene_mean_subtract: bool = False,
+    neg_text_embedding: torch.Tensor | None = None,
 ) -> list[GroundingResult]:
     """Return the top-k clusters matching the text embedding.
 
@@ -70,15 +72,30 @@ def rank_query(
         scores pass. This adapts to different queries / scenes where absolute
         CLIP similarity magnitudes vary.
       - Otherwise, `score_threshold` is used as a fixed cut-off.
+
+    Score refinements (stack; each is optional):
+      - `scene_mean_subtract`: subtract the mean score over observed surface
+        voxels before thresholding. Highlights voxels that are *unusually*
+        similar to the query rather than merely positive. A simple, strong
+        corrector for CLIP's scene-wide similarity offsets.
+      - `neg_text_embedding`: if supplied, subtract its per-voxel cosine
+        similarity from the primary one (relative-prompt delta — helps when
+        CLIP has a broad baseline affinity for the query category and you
+        want to isolate the specific adjective / noun head).
     """
     if voxel_feats.ndim != 4:
         raise ValueError(f"expected (Nx,Ny,Nz,D), got {tuple(voxel_feats.shape)}")
 
     with torch.no_grad():
         scores = cosine_score(text_embedding, voxel_feats)  # (Nx,Ny,Nz)
+        if neg_text_embedding is not None:
+            scores = scores - cosine_score(neg_text_embedding, voxel_feats)
         observed = voxel_weights >= min_weight
         if surface_only and voxel_tsdf is not None:
             observed = observed & (voxel_tsdf.abs() <= surface_tsdf_abs_max)
+        if scene_mean_subtract:
+            if observed.any():
+                scores = scores - scores[observed].mean()
         if top_percentile is not None:
             observed_scores = scores[observed]
             if observed_scores.numel() == 0:

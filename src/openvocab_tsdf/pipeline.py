@@ -230,6 +230,8 @@ def ground_text(
     cluster_eps_vox: int = 2,
     min_cluster_voxels: int = 8,
     top_k: int = 5,
+    scene_mean_subtract: bool = False,
+    negative_query: str | None = None,
 ) -> list:
     """Load a saved map, embed a query, return ranked 3D targets."""
     from openvocab_tsdf.grounding.query import rank_query
@@ -245,7 +247,10 @@ def ground_text(
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
     )
-    q = encoder.encode_texts([query])[0]
+    texts = [query] + ([negative_query] if negative_query else [])
+    emb = encoder.encode_texts(texts)
+    q = emb[0]
+    neg = emb[1] if negative_query else None
 
     return rank_query(
         voxel_feats=feat,
@@ -260,6 +265,8 @@ def ground_text(
         cluster_eps_vox=cluster_eps_vox,
         min_cluster_voxels=min_cluster_voxels,
         top_k=top_k,
+        scene_mean_subtract=scene_mean_subtract,
+        neg_text_embedding=neg,
     )
 
 

@@ -1,0 +1,44 @@
+{
+  "timestamp": "2026-04-13T05:35:47+00:00",
+  "map": "outputs/demo_map.npz",
+  "spec": "eval/specs/synthetic_demo_mean_sub.yaml",
+  "summary": {
+    "num_cases": 3,
+    "hit@1": 0.0,
+    "hit@5": 0.3333333333333333,
+    "mean_top1_l2_m": 0.6694117640187756,
+    "mean_latency_s": 0.0530800326669123
+  },
+  "per_case": [
+    {
+      "query": "a red ball",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 0.6510512142529692,
+      "top1_score": 0.03755002096295357,
+      "latency_s": 0.15044057600243832,
+      "num_results": 4
+    },
+    {
+      "query": "a blue bar",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 0.3384626703706169,
+      "top1_score": 0.022921551018953323,
+      "latency_s": 0.004732830999273574,
+      "num_results": 5
+    },
+    {
+      "query": "green grass floor",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 3,
+      "top1_centroid_l2_m": 1.0187214074327404,
+      "top1_score": 0.020494595170021057,
+      "latency_s": 0.004066690999025013,
+      "num_results": 5
+    }
+  ]
+}

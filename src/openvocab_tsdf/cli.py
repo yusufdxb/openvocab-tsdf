@@ -98,7 +98,10 @@ def ground(
     config: Path | None = typer.Option(None, "--config", "-c"),
     top_k: int = typer.Option(5, "--top-k"),
     score_threshold: float = typer.Option(0.22, "--score-threshold"),
+    top_percentile: float | None = typer.Option(None, "--top-percentile"),
     min_cluster_voxels: int = typer.Option(8, "--min-cluster"),
+    scene_mean_subtract: bool = typer.Option(False, "--mean-sub"),
+    negative_query: str | None = typer.Option(None, "--neg", help="negative prompt"),
 ) -> None:
     """Text-to-3D grounding query against a saved map."""
     from openvocab_tsdf.config import load_config
@@ -119,9 +122,12 @@ def ground(
         map_path,
         query,
         **kwargs,
-        score_threshold=score_threshold,
+        score_threshold=None if top_percentile is not None else score_threshold,
+        top_percentile=top_percentile,
         min_cluster_voxels=min_cluster_voxels,
         top_k=top_k,
+        scene_mean_subtract=scene_mean_subtract,
+        negative_query=negative_query,
     )
 
     table = Table(title=f"grounding: {query!r}")
