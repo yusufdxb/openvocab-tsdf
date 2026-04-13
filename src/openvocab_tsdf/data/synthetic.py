@@ -85,7 +85,6 @@ def render_depth(
     """
     H, W = intrinsics.height, intrinsics.width
     K = intrinsics.K
-    T_cw = np.linalg.inv(T_wc.astype(np.float32))
     cam_origin_w = T_wc[:3, 3].astype(np.float32)
 
     # build rays in camera frame

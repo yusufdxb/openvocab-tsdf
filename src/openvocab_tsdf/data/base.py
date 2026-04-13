@@ -6,9 +6,10 @@ Every dataset loader yields a uniform `RGBDFrame` stream so downstream code
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, Protocol
+from typing import Protocol
 
 import numpy as np
 
@@ -32,7 +33,7 @@ class CameraIntrinsics:
         )
 
     @classmethod
-    def from_matrix(cls, K: np.ndarray, width: int, height: int) -> "CameraIntrinsics":
+    def from_matrix(cls, K: np.ndarray, width: int, height: int) -> CameraIntrinsics:
         K = np.asarray(K, dtype=np.float32)
         if K.shape != (3, 3):
             raise ValueError(f"expected 3x3 K, got {K.shape}")

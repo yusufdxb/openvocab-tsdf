@@ -18,8 +18,8 @@ Numbering is 0-based integer (no zero-pad), sortable by integer index.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import imageio.v3 as iio
 import numpy as np

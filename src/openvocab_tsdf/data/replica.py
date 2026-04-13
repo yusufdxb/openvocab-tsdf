@@ -15,8 +15,8 @@ intrinsics or depth scales in a YAML next to the scene folder, not hard-coded.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import imageio.v3 as iio
 import numpy as np
