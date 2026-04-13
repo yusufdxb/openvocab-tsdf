@@ -98,6 +98,17 @@ Fig: `figures/room0_sam/a_sofa.png` — the top-brightness-quartile heatmap voxe
 - PyTorch: **1280 FPS**
 - TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.
 
+**Block-hash sparse *geometry* (`BlockHashTSDF`) — 12 m³ cube, 4 cm voxels, 24 synthetic frames:**
+
+| backend | geom storage | allocated blocks | peak VRAM | integrate |
+|---|---|---|---|---|
+| dense reference | 540.0 MB | 54 872 / 54 872 (100 %) | 2484 MB | 48 FPS |
+| **block_hash** | **8.5 MB** | **831 / 54 872 (1.51 %)** | **2103 MB** | **51 FPS** |
+
+**63× less geometry memory** at similar throughput. The scene is tiled into 8³-voxel blocks with a dense `block_slot[Nbx, Nby, Nbz]` int32 index (0.2 % of the full voxel count); blocks are allocated lazily on first observation, and an integrate-time 2-pass GPU scatter writes tsdf/weight/color into the pool (`benchmarks/bench_block_hash_scale.py`). Feature storage is still the per-voxel `SparseFeatureTSDF` above — the two sparse backends compose.
+
+Honest limitation: the integrate pass currently projects every voxel center every frame, which at 20 m³ × 4 cm (125 M voxels) OOMs even though the block pool itself stays small. Frustum-culling blocks before projection is the natural next step; the `BlockHashTSDF` storage layer is already the hard part.
+
 **Sparse-feature backend on Replica room0 (1.67 M voxels, 512-dim features):**
 
 | backend | FPS | feat (MB) | allocated voxels | sparsity | peak VRAM (MB) |
