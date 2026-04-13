@@ -144,8 +144,8 @@ def encode_and_fuse(
     if m.backend not in ("reference", "sparse_feature"):
         log.warning("backend %r does not support feature storage; forcing reference", m.backend)
         m.backend = "reference"  # fall through
-    if mode == "patch" and m.backend == "sparse_feature":
-        log.warning("sparse_feature backend does not support patch mode yet; forcing global")
+    if mode in ("patch", "sam_dense") and m.backend == "sparse_feature":
+        log.warning("sparse_feature backend does not support %r mode yet; forcing global", mode)
         mode = "global"
 
     # Build the volume using `build_tsdf` (shared path with fuse)
@@ -218,10 +218,21 @@ def encode_and_fuse(
     colors = [f.color for f in frame_list]
 
     t0 = time.perf_counter()
+    sam_extractor = None
     if mode == "global":
         img_feats = encoder.encode_images(colors, batch_size=cfg.semantics.batch_size)
     elif mode == "patch":
         img_feats = encoder.encode_images_patches(colors, batch_size=cfg.semantics.batch_size)
+    elif mode == "sam_dense":
+        from openvocab_tsdf.semantics.sam_dense import (
+            SAMDenseConfig,
+            SAMDenseFeatureExtractor,
+        )
+
+        sam_extractor = SAMDenseFeatureExtractor(
+            SAMDenseConfig(device=cfg.semantics.device), encoder
+        )
+        img_feats = None  # features computed lazily per-frame (too big to keep all)
     else:
         raise NotImplementedError(f"semantics.mode={mode!r} not implemented")
     enc_s = time.perf_counter() - t0
@@ -230,7 +241,7 @@ def encode_and_fuse(
     if mode == "global":
         for frame, feat in zip(frame_list, img_feats, strict=True):
             vol.integrate(frame, feature=feat)
-    else:  # patch
+    elif mode == "patch":
         for frame, fm in zip(frame_list, img_feats, strict=True):
             vol.integrate(
                 frame,
@@ -238,6 +249,13 @@ def encode_and_fuse(
                 feature_map_input_size=encoder.input_size,
                 feature_map_patch_size=encoder.patch_size,
             )
+    else:  # sam_dense
+        for i, frame in enumerate(frame_list):
+            dfm_np = sam_extractor.extract(frame.color)
+            dfm = torch.from_numpy(dfm_np).to(cfg.semantics.device)
+            vol.integrate(frame, dense_feature_map=dfm)
+            if (i + 1) % 25 == 0:
+                log.info("sam_dense: integrated %d / %d", i + 1, len(frame_list))
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     fuse_s = time.perf_counter() - t0

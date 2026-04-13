@@ -51,7 +51,7 @@ class MappingConfig(BaseModel):
 class SemanticsConfig(BaseModel):
     model: str = "ViT-B-16"
     pretrained: str = "laion2b_s34b_b88k"
-    mode: Literal["global", "patch", "mask"] = "global"
+    mode: Literal["global", "patch", "mask", "sam_dense"] = "global"
     batch_size: int = 16
     device: str = "cuda:0"
     dtype: Literal["fp16", "fp32"] = "fp16"

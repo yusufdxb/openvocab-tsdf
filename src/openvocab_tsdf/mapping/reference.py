@@ -98,6 +98,7 @@ class ReferenceTSDF:
         feature_map: torch.Tensor | None = None,
         feature_map_input_size: int = 224,
         feature_map_patch_size: int = 16,
+        dense_feature_map: torch.Tensor | None = None,
     ) -> None:
         """Fold one RGB-D frame into the volume.
 
@@ -110,9 +111,13 @@ class ReferenceTSDF:
             pixel. `feature_map_input_size` is the square side after
             preprocess (typically 224), `feature_map_patch_size` is the ViT's
             patch stride in pixels (typically 16 for ViT-B/16).
+          - `dense_feature_map`: a full-resolution (H, W, D) feature map whose
+            (v, u) index matches the depth image directly. Used by the
+            SAM-per-mask + CLIP dense path (`mode: sam_dense`).
         """
-        if feature is not None and feature_map is not None:
-            raise ValueError("pass either `feature` OR `feature_map`, not both")
+        n_modes = sum(x is not None for x in (feature, feature_map, dense_feature_map))
+        if n_modes > 1:
+            raise ValueError("pass at most one of `feature`, `feature_map`, or `dense_feature_map`")
         cfg = self.cfg
 
         T_wc = torch.as_tensor(frame.T_wc, dtype=torch.float32, device=self.device)
@@ -188,6 +193,24 @@ class ReferenceTSDF:
             if sel.numel() > 0:
                 idx_sel = idx[sel]
                 w_sel = w_old[sel]
+                f_old = self.feat.view(-1, cfg.feature_dim)[idx_sel]
+                f_merged = (f_old * w_sel.unsqueeze(-1) + feat_sample) / (w_sel + 1.0).unsqueeze(-1)
+                self.feat.view(-1, cfg.feature_dim).index_copy_(0, idx_sel, f_merged)
+
+        if dense_feature_map is not None and self.feat is not None:
+            # dense_feature_map: (H, W, D) indexed by image (v, u) directly —
+            # no preprocess remapping needed.
+            dfm = dense_feature_map.to(self.feat.dtype).to(self.device)
+            if dfm.shape[:2] != (H, W):
+                raise ValueError(
+                    f"dense_feature_map shape {tuple(dfm.shape[:2])} must match depth {(H, W)}"
+                )
+            eligible = near_surface_at_idx
+            sel = eligible.nonzero(as_tuple=False).squeeze(-1)
+            if sel.numel() > 0:
+                idx_sel = idx[sel]
+                w_sel = w_old[sel]
+                feat_sample = dfm[v_s[idx_sel], u_s[idx_sel], :]
                 f_old = self.feat.view(-1, cfg.feature_dim)[idx_sel]
                 f_merged = (f_old * w_sel.unsqueeze(-1) + feat_sample) / (w_sel + 1.0).unsqueeze(-1)
                 self.feat.view(-1, cfg.feature_dim).index_copy_(0, idx_sel, f_merged)

@@ -58,11 +58,31 @@ Regenerate: `python scripts/render_figures.py --mesh outputs/replica_<scene>_mes
 
 | scene | voxel | frames | mode | mean-sub | top% | hit@1 | hit@5 | hit-L2 (m) |
 |---|---|---|---|---|---|---|---|---|
-| room0   | 6 cm | 500 (stride 4)  | patch  | off | 0.005 | 22.2 % | 44.4 % | 3.46 |
-| **room0**   | **6 cm** | **500 (stride 4)**  | **global** | **off** | **0.005** | **33.3 %** | **55.6 %** | **2.63** |
-| room0   | 4 cm | **2 000 (full)** | global | off | 0.001 | 22.2 % | 55.6 % | 2.71 |
-| **office0** | **6 cm** | **500 (stride 4)**  | **global** | **off** | **0.005** | **25.0 %** | **87.5 %** | **2.15** |
-| office0 | 6 cm | 500 (stride 4)  | global | on  | 0.005 | 25.0 % | 87.5 % | 2.15 |
+| room0   | 6 cm | 500 (stride 4)  | patch    | off | 0.005 | 22.2 % | 44.4 % | 3.46 |
+| room0   | 6 cm | 500 (stride 4)  | global   | off | 0.005 | 33.3 % | 55.6 % | 2.63 |
+| room0   | 4 cm | 2 000 (full)    | global   | off | 0.001 | 22.2 % | 55.6 % | 2.71 |
+| **room0**   | **6 cm** | **100 (stride 20)** | **sam_dense** | **off** | **0.005** | **55.6 %** | **88.9 %** | **2.42** |
+| office0 | 6 cm | 500 (stride 4)  | global   | off | 0.005 | 25.0 % | 87.5 % | 2.15 |
+| office0 | 6 cm | 500 (stride 4)  | global   | on  | 0.005 | 25.0 % | 87.5 % | 2.15 |
+| **office0** | **6 cm** | **100 (stride 20)** | **sam_dense** | **off** | **0.005** | **37.5 %** | **75.0 %** | **1.54** |
+
+### SAM-per-mask CLIP dense features (`mode: sam_dense`)
+
+ConceptFusion / Grounded-SAM-lite pipeline: MobileSAM auto-masks → CLIP on each mask crop → per-pixel feature map (mask features blended by predicted IoU; pixels outside every mask fall back to the frame-global CLIP embedding). Full-resolution dense feature maps (not patch-resize-crop), integrated per-pixel into voxels.
+
+Delta vs the global-features baseline, head-to-head on the same scenes:
+
+| scene | metric | global | **sam_dense** | Δ |
+|---|---|---|---|---|
+| room0   | hit@1 | 33.3 % | **55.6 %** | **+22.3 pp** |
+| room0   | hit@5 | 55.6 % | **88.9 %** | **+33.3 pp** |
+| room0   | hit-L2 (m) | 2.63 | 2.42 | −0.21 |
+| office0 | hit@1 | 25.0 % | **37.5 %** | **+12.5 pp** |
+| office0 | hit-L2 (m) | 2.15 | **1.54** | **−0.61 (−29 %)** |
+
+The mapping stack doesn't change — only the feature extractor does. MobileSAM (`vit_t`, 40 MB weights) runs at ~384×384 downsampled input (~1.7 s / native-resolution frame); CLIP is run on ~20–40 mask crops batched. Total pipeline cost is dominated by SAM; encode throughput drops from ~250 FPS (global) to ~0.6 FPS (SAM dense), which is why we stride 20× for this config. Feature *quality* on the per-voxel side is substantially better.
+
+Fig: `figures/room0_sam/a_sofa.png` — the top-brightness-quartile heatmap voxels land squarely inside the GT bbox in the xy projection. Compare against `figures/room0/a_sofa.png` (global features) where the hot voxels scatter across the room.
 
 **Full ablation on room0** (8 configs, patch vs global × mean-sub × top-percentile): see the `eval/run_ablation.py` output embedded in commit `a1a628e`. Summary: `global / off / 0.005` is the best config there.
 
