@@ -1,0 +1,54 @@
+[
+  {
+    "scene": "office0",
+    "model": "vit_t",
+    "edge": 384,
+    "pps": 12,
+    "encode_s": -1.0,
+    "num_cases": 8,
+    "hit@1": 0.375,
+    "hit@5": 0.75,
+    "mean_top1_l2_m": 1.8013365438654905,
+    "mean_top1_l2_m_hit_only": 1.540792132367354,
+    "mean_latency_s": 0.05152057562554546
+  },
+  {
+    "scene": "office0",
+    "model": "vit_t",
+    "edge": 512,
+    "pps": 16,
+    "encode_s": -1.0,
+    "num_cases": 8,
+    "hit@1": 0.5,
+    "hit@5": 0.75,
+    "mean_top1_l2_m": 1.8512025157654795,
+    "mean_top1_l2_m_hit_only": 1.7406787661404142,
+    "mean_latency_s": 0.030696255125803873
+  },
+  {
+    "scene": "room0",
+    "model": "vit_t",
+    "edge": 384,
+    "pps": 12,
+    "encode_s": 171.7395475079975,
+    "num_cases": 9,
+    "hit@1": 0.5555555555555556,
+    "hit@5": 0.8888888888888888,
+    "mean_top1_l2_m": 2.593447891716491,
+    "mean_top1_l2_m_hit_only": 2.418906292595298,
+    "mean_latency_s": 0.08165674989059982
+  },
+  {
+    "scene": "room0",
+    "model": "vit_t",
+    "edge": 512,
+    "pps": 16,
+    "encode_s": 257.70441224899696,
+    "num_cases": 9,
+    "hit@1": 0.5555555555555556,
+    "hit@5": 0.8888888888888888,
+    "mean_top1_l2_m": 2.78050988377338,
+    "mean_top1_l2_m_hit_only": 2.875238919355673,
+    "mean_latency_s": 0.07315456233239577
+  }
+]
