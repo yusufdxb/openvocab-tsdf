@@ -62,6 +62,12 @@ class GroundingNode(Node):
         self.declare_parameter("depth_topic", "/camera/depth/image_raw")
         self.declare_parameter("info_topic", "/camera/camera_info")
         self.declare_parameter("tf_timeout_s", 0.1)
+        # live-mode batching + RViz preview
+        self.declare_parameter("encode_batch_size", 4)  # CLIP batch; 1 = per-frame
+        self.declare_parameter("encode_batch_timeout_s", 0.25)  # drain partial batches
+        self.declare_parameter("voxel_preview_topic", "/openvocab/voxel_preview")
+        self.declare_parameter("voxel_preview_rate_hz", 2.0)
+        self.declare_parameter("voxel_preview_max_cubes", 20_000)
 
         self._live_mode = bool(self.get_parameter("live_mode").value)
         self._device = str(self.get_parameter("device").value)
@@ -168,9 +174,29 @@ class GroundingNode(Node):
         self._integrated_count = 0
         self._last_log_t = time.monotonic()
 
+        # batched encode state (protected by its own lock; flush-on-timer drains)
+        self._batch_size = max(1, int(self.get_parameter("encode_batch_size").value))
+        self._batch_timeout = float(self.get_parameter("encode_batch_timeout_s").value)
+        self._pending_frames: list = []  # list[RGBDFrame]
+        self._pending_lock = threading.Lock()
+        self._last_batch_push = time.monotonic()
+        self._batch_timer = self.create_timer(self._batch_timeout, self._flush_batch_timer)
+
+        # RViz voxel preview publisher
+        from visualization_msgs.msg import Marker  # type: ignore
+
+        self._preview_pub = self.create_publisher(
+            Marker, str(self.get_parameter("voxel_preview_topic").value), 1
+        )
+        self._preview_max = int(self.get_parameter("voxel_preview_max_cubes").value)
+        rate = float(self.get_parameter("voxel_preview_rate_hz").value)
+        if rate > 0.0:
+            self._preview_timer = self.create_timer(1.0 / rate, self._publish_voxel_preview)
+
         self.get_logger().info(
             f"live mode: volume {self._live_vol.dims}, voxel={vsz} m, bounds={bmin}->{bmax}, "
-            f"stride={self._stride}"
+            f"stride={self._stride}, encode_batch={self._batch_size}, "
+            f"preview_max={self._preview_max}"
         )
 
     def _on_live_frame(self, color_msg, depth_msg, info_msg):  # type: ignore[no-untyped-def]
@@ -221,19 +247,97 @@ class GroundingNode(Node):
             frame_id=self._frame_count,
         )
 
-        # encode CLIP global feature (single image)
-        feat = self.encoder.encode_images([color])[0]  # (D,)
+        with self._pending_lock:
+            self._pending_frames.append(frame)
+            full = len(self._pending_frames) >= self._batch_size
+
+        if full:
+            self._drain_pending()
+
+    def _flush_batch_timer(self) -> None:  # noqa: D401
+        """Drain whatever is pending if no new frames arrived within the timeout."""
+        with self._pending_lock:
+            if not self._pending_frames:
+                return
+            age = time.monotonic() - self._last_batch_push
+            if age < self._batch_timeout and len(self._pending_frames) < self._batch_size:
+                return
+        self._drain_pending()
+
+    def _drain_pending(self) -> None:
+        with self._pending_lock:
+            if not self._pending_frames:
+                return
+            frames = self._pending_frames
+            self._pending_frames = []
+            self._last_batch_push = time.monotonic()
+
+        colors = [f.color for f in frames]
+        feats = self.encoder.encode_images(colors, batch_size=self._batch_size)
 
         with self._map_lock:
-            self._live_vol.integrate(frame, feature=feat)
-            self._integrated_count += 1
+            for f, fv in zip(frames, feats, strict=True):
+                self._live_vol.integrate(f, feature=fv)
+                self._integrated_count += 1
 
         now = time.monotonic()
         if now - self._last_log_t > 5.0:
             self.get_logger().info(
-                f"live: integrated {self._integrated_count} frames " f"(recv {self._frame_count})"
+                f"live: integrated {self._integrated_count} frames "
+                f"(recv {self._frame_count}, last_batch={len(frames)})"
             )
             self._last_log_t = now
+
+    def _publish_voxel_preview(self) -> None:
+        """Publish a CUBE_LIST Marker covering a subsample of surface voxels."""
+        from builtin_interfaces.msg import Duration  # type: ignore
+        from geometry_msgs.msg import Vector3  # type: ignore
+        from std_msgs.msg import ColorRGBA, Header  # type: ignore
+        from visualization_msgs.msg import Marker  # type: ignore
+
+        with self._map_lock:
+            weight = self._live_vol.weight
+            tsdf = self._live_vol.tsdf
+            color = self._live_vol.color
+            surface = (weight > 0) & (tsdf.abs() <= 0.5)
+            if not surface.any():
+                return
+            idx = surface.nonzero(as_tuple=False)  # (N, 3)
+            n = idx.shape[0]
+            if n > self._preview_max:
+                sel = torch.randperm(n, device=idx.device)[: self._preview_max]
+                idx = idx[sel]
+            origin = self._live_vol.origin
+            vs = self._live_vol.voxel_size_m
+            centers = (idx.float() + 0.5) * vs + origin
+            cols = color[idx[:, 0], idx[:, 1], idx[:, 2]].clamp(0, 255).to(torch.uint8)
+        centers_np = centers.cpu().numpy()
+        cols_np = cols.cpu().numpy()
+
+        m = Marker()
+        m.header = Header(frame_id=self._map_frame)
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = "openvocab_surface"
+        m.id = 0
+        m.type = Marker.CUBE_LIST
+        m.action = Marker.ADD
+        m.scale = Vector3(x=vs, y=vs, z=vs)
+        # Inline per-cube positions + colors
+        m.points = [
+            Point(x=float(centers_np[i, 0]), y=float(centers_np[i, 1]), z=float(centers_np[i, 2]))
+            for i in range(centers_np.shape[0])
+        ]
+        m.colors = [
+            ColorRGBA(
+                r=float(cols_np[i, 0]) / 255.0,
+                g=float(cols_np[i, 1]) / 255.0,
+                b=float(cols_np[i, 2]) / 255.0,
+                a=0.85,
+            )
+            for i in range(cols_np.shape[0])
+        ]
+        m.lifetime = Duration(sec=0, nanosec=0)
+        self._preview_pub.publish(m)
 
     # --------------------------------------------------------------- service
     def _on_ground(self, req: GroundText.Request, rsp: GroundText.Response) -> GroundText.Response:

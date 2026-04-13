@@ -29,13 +29,15 @@ ros2 run openvocab_tsdf_node live_rgbd_publisher --ros-args \
 PUB_PID=$!
 echo "[smoke] publisher PID=$PUB_PID"
 
-# 2. live grounding node
+# 2. live grounding node (batched encode + RViz preview)
 ros2 run openvocab_tsdf_node grounding_node --ros-args \
   -p live_mode:=true \
   -p voxel_size_m:=0.08 \
   -p bounds_min:=[-1.0,-1.0,-1.0] \
   -p bounds_max:=[7.0,6.0,4.0] \
   -p frame_stride:=2 \
+  -p encode_batch_size:=4 \
+  -p voxel_preview_rate_hz:=2.0 \
   -p device:=cuda:0 -p dtype:=fp16 \
   >/tmp/live_node.log 2>&1 &
 NODE_PID=$!
@@ -52,6 +54,12 @@ ros2 service call /openvocab/ground openvocab_tsdf_msgs/srv/GroundText \
   > /tmp/live_query.log 2>&1
 RC=$?
 
+echo "[smoke] checking voxel preview topic..."
+timeout 3 ros2 topic echo --once /openvocab/voxel_preview > /tmp/live_preview.log 2>&1 || true
+# `points:` holds a YAML list; count its items by leading '- ' dashes
+PREVIEW_CUBES=$(awk '/^points:/,/^colors:/' /tmp/live_preview.log | grep -c '^- ')
+echo "[smoke] preview cubes received: $PREVIEW_CUBES"
+
 echo
 echo "=== live_node.log (last 20) ==="
 tail -20 /tmp/live_node.log
@@ -62,10 +70,10 @@ echo
 echo "=== service call result ==="
 tail -30 /tmp/live_query.log
 
-if [ $RC -eq 0 ] && grep -q "mode=live" /tmp/live_query.log; then
-  echo "[smoke] PASS — live mode confirmed by service diagnostic"
+if [ $RC -eq 0 ] && grep -q "mode=live" /tmp/live_query.log && [ "$PREVIEW_CUBES" -gt 50 ]; then
+  echo "[smoke] PASS — live + batched encode + voxel preview all working ($PREVIEW_CUBES cubes)"
   exit 0
 else
-  echo "[smoke] FAIL — service call did not return live diagnostic"
+  echo "[smoke] FAIL — diagnostic=$(grep -o 'mode=live[^ ]*' /tmp/live_query.log || echo none), preview_cubes=$PREVIEW_CUBES"
   exit 1
 fi
