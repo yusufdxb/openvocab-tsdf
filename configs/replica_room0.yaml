@@ -1,37 +1,40 @@
-# Replica room_0 scene config.
-# Inherits all other fields from configs/default.yaml when loaded by scripts
-# that merge them; standalone use of this file is also valid and self-contained.
+# Replica room0 — first full-Replica run.
+# Archive layout: <root>/Replica/<scene>/{results/,traj.txt}.
+# Camera intrinsics are shared across scenes via <root>/Replica/cam_params.json:
+#   1200×680, fx=fy=600, cx=599.5, cy=339.5, depth_scale=6553.5 (uint16 → m).
 
 dataset:
   name: replica
-  root: ~/data/replica
-  scene: room_0
-  max_frames: 500
-  stride: 1
+  root: ~/data/replica/Replica
+  scene: room0
+  max_frames: 500       # subsample for a first pass; bump later for full accuracy
+  stride: 4             # every 4th frame; 500 frames span the whole trajectory
 
 camera:
   depth_scale: 6553.5
   depth_trunc_m: 6.0
 
 mapping:
-  voxel_size_m: 0.03           # larger voxels for a first pass; drop to 0.02 later
-  truncation_distance_m: 0.15
+  voxel_size_m: 0.06
+  truncation_distance_m: 0.24
   hash_capacity: 1048576
   block_size: 8
   backend: reference
   device: cuda:0
   store_color: true
-  store_features: false   # geometry-only sanity run; flip to true in Phase 2
+  store_features: true
   feature_dim: 512
-  bounds_min: null
-  bounds_max: null
+  # Trajectory is in x∈[1,4] y∈[0,2] z∈[-0.2,0.7]; surfaces reach ~3 m further.
+  # These bounds fit the room with margin; adjust per scene.
+  bounds_min: [-2.0, -3.0, -2.0]
+  bounds_max: [7.0, 5.0, 3.0]
   auto_bounds_radius_m: 5.0
   max_weight: 32.0
 
 semantics:
   model: ViT-B-16
   pretrained: laion2b_s34b_b88k
-  mode: global
+  mode: patch
   batch_size: 16
   device: cuda:0
   dtype: fp16

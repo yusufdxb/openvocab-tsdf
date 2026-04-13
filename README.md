@@ -35,6 +35,12 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 - Query latency: <100 ms per free-form prompt against the 1.2 M-voxel feature map
 - Per-query heatmap PLYs: 19.4 k surface points each (`outputs/heatmaps_demo/*.ply`)
 
+**Replica `room0` (500 frames @ 1200×680, 1.67 M voxels at 6 cm):**
+- CLIP patch encode: 1.91 s (262 FPS), feature fusion: 3.51 s (143 FPS at native 1200×680)
+- Geometry fuse: 81.3 FPS, mesh 97.3 k vertices / 194 k triangles
+- Per-query latency: **83–283 ms** (mean ~135 ms) for 10 realistic prompts ("a chair", "a sofa", "a plant", ...); scene-mean-subtract on; top-1 + top-3 clusters returned per query
+- Per-query heatmap PLYs: 104 k surface points each (`outputs/heatmaps_replica_room0/*.ply`)
+
 **CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
 - PyTorch: **1280 FPS**
 - TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.
