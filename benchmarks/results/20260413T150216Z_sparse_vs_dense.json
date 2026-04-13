@@ -1,0 +1,68 @@
+{
+  "name": "sparse_vs_dense",
+  "timestamp": "2026-04-13T15:02:16+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "config": "configs/replica_room0.yaml",
+    "max_frames": 250,
+    "stride": 8,
+    "voxel_size_m": 0.06,
+    "bounds_min": [
+      -2.0,
+      -3.0,
+      -2.0
+    ],
+    "bounds_max": [
+      7.0,
+      5.0,
+      3.0
+    ],
+    "feature_dim": 512
+  },
+  "runs": [
+    {
+      "backend": "dense_reference",
+      "frames": 250,
+      "integrate_s": 2.1063482139943517,
+      "fps": 118.68882758274573,
+      "feat_bytes": 3457843200,
+      "feat_mb": 3297.7,
+      "feat_voxels_allocated": 1688400,
+      "total_voxels": 1688400,
+      "peak_vram_mb": 4833.4
+    },
+    {
+      "backend": "sparse_pytorch",
+      "frames": 250,
+      "integrate_s": 2.0312542940009735,
+      "fps": 123.0766628965857,
+      "feat_bytes": 1122195456,
+      "feat_mb": 1070.2,
+      "feat_voxels_allocated": 547947,
+      "total_voxels": 1688400,
+      "peak_vram_mb": 3430.5
+    },
+    {
+      "backend": "sparse_triton",
+      "frames": 250,
+      "integrate_s": 1.1942898639972555,
+      "fps": 209.32941619654784,
+      "feat_bytes": 1122195456,
+      "feat_mb": 1070.2,
+      "feat_voxels_allocated": 547947,
+      "total_voxels": 1688400,
+      "peak_vram_mb": 3272.2
+    }
+  ],
+  "savings": {
+    "feat_mb_dense": 3297.7,
+    "feat_mb_sparse": 1070.2,
+    "feat_mem_ratio_dense_over_sparse": 3.081319908677299,
+    "sparsity_ratio": 0.3245362473347548,
+    "triton_speedup_over_pytorch_sparse": 1.700805102039819
+  }
+}

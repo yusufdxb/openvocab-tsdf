@@ -31,6 +31,70 @@ import torch
 from openvocab_tsdf.data.base import RGBDFrame
 from openvocab_tsdf.mapping.base import Mesh, VoxelQueryResult
 
+try:
+    import triton
+    import triton.language as tl
+
+    _HAS_TRITON = True
+except ImportError:  # pragma: no cover
+    _HAS_TRITON = False
+
+
+if _HAS_TRITON:
+
+    @triton.jit
+    def _sparse_feat_update_kernel(
+        pool_ptr,  # (CAPACITY, D) fp32
+        slot_ptr,  # (N,) int32
+        w_old_ptr,  # (N,) fp32
+        feat_sample_ptr,  # (D,) fp32 — shared across all N
+        N,
+        D,
+        BLOCK_D: tl.constexpr,
+    ):
+        voxel_id = tl.program_id(0)
+        d_block = tl.program_id(1)
+        # each program handles one (voxel, d-chunk)
+        if voxel_id >= N:
+            return
+        slot = tl.load(slot_ptr + voxel_id)
+        w = tl.load(w_old_ptr + voxel_id)
+        d_offs = d_block * BLOCK_D + tl.arange(0, BLOCK_D)
+        d_mask = d_offs < D
+        base = slot.to(tl.int64) * D
+        f_old = tl.load(pool_ptr + base + d_offs, mask=d_mask, other=0.0)
+        f_samp = tl.load(feat_sample_ptr + d_offs, mask=d_mask, other=0.0)
+        f_new = (f_old * w + f_samp) / (w + 1.0)
+        tl.store(pool_ptr + base + d_offs, f_new, mask=d_mask)
+
+    def _triton_sparse_feat_update(
+        pool: torch.Tensor,  # (CAPACITY, D) fp32, contiguous, cuda
+        slot_ids: torch.Tensor,  # (N,) int32, cuda
+        w_old: torch.Tensor,  # (N,) fp32, cuda
+        feat_sample: torch.Tensor,  # (D,) fp32, cuda
+    ) -> None:
+        assert pool.is_cuda and pool.is_contiguous()
+        N = int(slot_ids.numel())
+        D = int(pool.shape[-1])
+        if N == 0:
+            return
+        BLOCK_D = 64 if D >= 64 else D
+        grid = (N, (D + BLOCK_D - 1) // BLOCK_D)
+        _sparse_feat_update_kernel[grid](
+            pool,
+            slot_ids.contiguous(),
+            w_old.contiguous(),
+            feat_sample.contiguous(),
+            N,
+            D,
+            BLOCK_D=BLOCK_D,
+        )
+
+else:
+
+    def _triton_sparse_feat_update(*args, **kwargs):  # pragma: no cover
+        raise RuntimeError("triton not available; use feat_update_backend='pytorch'")
+
 
 @dataclass
 class SparseFeatureTSDFConfig:
@@ -44,6 +108,11 @@ class SparseFeatureTSDFConfig:
     initial_feat_capacity: int = 65_536  # ~128 MB at 512 fp32
     max_feat_capacity: int = 4_000_000  # cap the pool even in pathological scenes
     device: str = "cuda:0"
+    # Kernel backend for the feature-pool update. 'pytorch' uses
+    # `index_copy_` + vectorized math (always available). 'triton' fuses
+    # the gather-compute-scatter into one JIT kernel and wins a bit of
+    # bandwidth back on larger voxel counts.
+    feat_update_backend: str = "pytorch"  # or "triton"
 
 
 class SparseFeatureTSDF:
@@ -236,9 +305,14 @@ class SparseFeatureTSDF:
         # Aggregate
         slot_long = old_slots.long()
         feat_sample = feature.to(self._feat_pool.dtype).to(self.device)
-        f_old = self._feat_pool[slot_long]
-        f_merged = (f_old * w_sel.unsqueeze(-1) + feat_sample) / (w_sel + 1.0).unsqueeze(-1)
-        self._feat_pool.index_copy_(0, slot_long, f_merged)
+        if self.cfg.feat_update_backend == "triton" and self._feat_pool.is_cuda:
+            _triton_sparse_feat_update(
+                self._feat_pool, slot_long.to(torch.int32), w_sel, feat_sample
+            )
+        else:
+            f_old = self._feat_pool[slot_long]
+            f_merged = (f_old * w_sel.unsqueeze(-1) + feat_sample) / (w_sel + 1.0).unsqueeze(-1)
+            self._feat_pool.index_copy_(0, slot_long, f_merged)
 
     @torch.no_grad()
     def extract_mesh(self, min_weight: float = 1.0) -> Mesh:

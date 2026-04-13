@@ -73,10 +73,13 @@ See `eval/specs/replica_room0.yaml` for the annotation protocol (structural quer
 
 | backend | FPS | feat (MB) | allocated voxels | sparsity | peak VRAM (MB) |
 |---|---|---|---|---|---|
-| dense reference | 120 | 3297.7 | 1 688 400 | 100.00 % | 4833 |
-| **sparse feature** | **125** | **1070.2** | **547 947** | **32.45 %** | **3430** |
+| dense reference | 119 | 3297.7 | 1 688 400 | 100.00 % | 4833 |
+| sparse (PyTorch `index_copy_`) | 123 | 1070.2 | 547 947 | 32.45 % | 3430 |
+| **sparse (Triton kernel)** | **209** | **1070.2** | **547 947** | **32.45 %** | **3272** |
 
-Feature-memory reduction: **3.08×** — identical integrate math, lazy per-voxel slot allocation keeps memory proportional to observed surface area rather than to the bounding box. `benchmarks/bench_sparse_features.py`.
+- Feature-memory reduction: **3.08×** (lazy per-voxel slot allocation — memory is proportional to observed surface, not to the bounding box)
+- Integrate-throughput speedup from the Triton kernel: **1.70× over the PyTorch sparse path, 1.76× over the dense reference** — one JIT kernel fuses the slot-indexed gather + weighted-mean + scatter.
+- See `benchmarks/bench_sparse_features.py` and `src/openvocab_tsdf/mapping/sparse_reference.py` (set `feat_update_backend: triton` in `SparseFeatureTSDFConfig`).
 
 **Live ROS 2 mapping (smoke test on synthetic publisher):**
 - Publisher replays 120 NICE-SLAM frames @ 15 Hz on `/camera/color/image_raw` + `/camera/depth/image_raw` + `/camera/camera_info` + TF.

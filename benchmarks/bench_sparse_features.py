@@ -129,7 +129,7 @@ def main() -> None:
     dense_row = _run_backend("dense_reference", dense, frames, feats)
     del dense
 
-    print("running sparse-feature backend ...")
+    print("running sparse-feature backend (pytorch update) ...")
     sparse = SparseFeatureTSDF(
         SparseFeatureTSDFConfig(
             voxel_size_m=cfg.mapping.voxel_size_m,
@@ -140,11 +140,30 @@ def main() -> None:
             feature_dim=D,
             initial_feat_capacity=1 << 16,
             max_feat_capacity=1 << 24,
+            feat_update_backend="pytorch",
             device=cfg.mapping.device,
         )
     )
-    sparse_row = _run_backend("sparse_feature", sparse, frames, feats)
+    sparse_row = _run_backend("sparse_pytorch", sparse, frames, feats)
     del sparse
+
+    print("running sparse-feature backend (triton update) ...")
+    sparse_trt = SparseFeatureTSDF(
+        SparseFeatureTSDFConfig(
+            voxel_size_m=cfg.mapping.voxel_size_m,
+            truncation_distance_m=cfg.mapping.truncation_distance_m,
+            bounds_min=bmin,
+            bounds_max=bmax,
+            store_color=True,
+            feature_dim=D,
+            initial_feat_capacity=1 << 16,
+            max_feat_capacity=1 << 24,
+            feat_update_backend="triton",
+            device=cfg.mapping.device,
+        )
+    )
+    sparse_trt_row = _run_backend("sparse_triton", sparse_trt, frames, feats)
+    del sparse_trt
 
     out_doc = {
         "name": "sparse_vs_dense",
@@ -167,7 +186,7 @@ def main() -> None:
             "bounds_max": list(bmax),
             "feature_dim": D,
         },
-        "runs": [dense_row, sparse_row],
+        "runs": [dense_row, sparse_row, sparse_trt_row],
         "savings": {
             "feat_mb_dense": dense_row["feat_mb"],
             "feat_mb_sparse": sparse_row["feat_mb"],
@@ -175,6 +194,9 @@ def main() -> None:
                 dense_row["feat_bytes"] / max(1, sparse_row["feat_bytes"])
             ),
             "sparsity_ratio": (sparse_row["feat_voxels_allocated"] / dense_row["total_voxels"]),
+            "triton_speedup_over_pytorch_sparse": (
+                sparse_trt_row["fps"] / max(1e-9, sparse_row["fps"])
+            ),
         },
     }
 
@@ -189,7 +211,7 @@ def main() -> None:
     print(hdr)
     print("|---|---|---|---|---|---|")
     total = dense_row["total_voxels"]
-    for r in (dense_row, sparse_row):
+    for r in (dense_row, sparse_row, sparse_trt_row):
         sparsity = 100 * r["feat_voxels_allocated"] / total
         print(
             f"| {r['backend']:16s} | {r['fps']:5.1f} | "
@@ -199,6 +221,10 @@ def main() -> None:
     print(
         f"\nfeature-memory ratio (dense/sparse): "
         f"{out_doc['savings']['feat_mem_ratio_dense_over_sparse']:.2f}x"
+    )
+    print(
+        f"triton/pytorch sparse FPS ratio: "
+        f"{out_doc['savings']['triton_speedup_over_pytorch_sparse']:.2f}x"
     )
     print(f"wrote {out}")
 
