@@ -1,0 +1,46 @@
+{
+  "name": "block_hash_with_features_scale",
+  "timestamp": "2026-04-13T21:38:57+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "side_m": 30.0,
+    "voxel_m": 0.04,
+    "frames": 24
+  },
+  "runs": [
+    {
+      "feature_dim": 0,
+      "blocks_allocated": 836,
+      "feat_voxels_allocated": 0,
+      "geom_bytes": 8560640,
+      "feat_bytes": 0,
+      "total_mb": 8.2,
+      "peak_vram_mb": 161.5,
+      "integrate_fps": 183.86225089028778
+    },
+    {
+      "feature_dim": 256,
+      "blocks_allocated": 836,
+      "feat_voxels_allocated": 189796,
+      "geom_bytes": 8560640,
+      "feat_bytes": 194351104,
+      "total_mb": 193.5,
+      "peak_vram_mb": 579.2,
+      "integrate_fps": 420.23644397078203
+    },
+    {
+      "feature_dim": 512,
+      "blocks_allocated": 836,
+      "feat_voxels_allocated": 189796,
+      "geom_bytes": 8560640,
+      "feat_bytes": 388702208,
+      "total_mb": 378.9,
+      "peak_vram_mb": 1001.3,
+      "integrate_fps": 303.4704424391569
+    }
+  ]
+}

@@ -47,15 +47,30 @@ class BlockHashTSDFConfig:
     store_color: bool = True
     initial_block_capacity: int = 4096  # 4096 * 512 voxels = 2M voxels
     max_block_capacity: int = 131_072  # ≈67M voxels ceiling
+    # Per-voxel sparse features (composes with the block-hash geometry).
+    # Per-voxel lazy slot allocation — same trick as `SparseFeatureTSDF`.
+    # Only voxels touched at least once in the truncation band allocate a
+    # feature pool row, so memory is proportional to observed surface area.
+    store_features: bool = False
+    feature_dim: int = 0
+    initial_feat_capacity: int = 65_536
+    max_feat_capacity: int = 8_000_000
     device: str = "cuda:0"
 
 
 class BlockHashTSDF:
-    """Sparse-geometry TSDF with block-indexed lazy allocation.
+    """Sparse-geometry TSDF with optional sparse-feature storage.
 
     Public interface matches `ReferenceTSDF`: `integrate`, `extract_mesh`,
-    `query`. Features are NOT stored here (would add 2 KB per voxel at
-    D=512); pair with `SparseFeatureTSDF` for an open-vocab run.
+    `query`. Both dense geometry and dense features are replaced by lazy
+    allocation in block and voxel pools, respectively, which composes cleanly
+    with the frustum-culled integrate.
+
+    Memory cost at warehouse scale (50 m³, 5 cm voxels, 0.02 % observed) +
+    512-d features, ~5 % of allocated-block voxels on a near-surface shell:
+      - geometry: ~5 MB
+      - features: ~100 MB
+    versus the dense equivalent at 20+ GB just for geometry.
     """
 
     def __init__(self, cfg: BlockHashTSDFConfig):
@@ -90,6 +105,27 @@ class BlockHashTSDF:
         else:
             self._color_pool = None
         self._num_blocks = 0
+
+        # Optional per-voxel feature pool, composed on top of the block pool.
+        # Allocated alongside each block row; `-1` in the voxel-slot table
+        # means this voxel has no feature yet. Allocation happens lazily on
+        # first near-surface touch, so memory is proportional to observed
+        # *surface* voxels, not to observed blocks.
+        self._store_features = bool(cfg.store_features and cfg.feature_dim > 0)
+        if self._store_features:
+            self._feat_voxel_slot = torch.full(
+                (self._capacity, BLOCK3), -1, dtype=torch.int32, device=self.device
+            )
+            self._feat_capacity = int(cfg.initial_feat_capacity)
+            self._feat_pool = torch.zeros(
+                (self._feat_capacity, cfg.feature_dim), dtype=torch.float32, device=self.device
+            )
+            self._num_feat_voxels = 0
+        else:
+            self._feat_voxel_slot = None
+            self._feat_pool = None
+            self._feat_capacity = 0
+            self._num_feat_voxels = 0
 
         # Cached BLOCK-center world coords (cheap; 1/512 of full-voxel storage).
         # Used for frustum culling at integrate time.
@@ -130,10 +166,19 @@ class BlockHashTSDF:
     def num_allocated_blocks(self) -> int:
         return int(self._num_blocks)
 
+    @property
+    def num_allocated_feat_voxels(self) -> int:
+        return int(self._num_feat_voxels)
+
     def memory_bytes(self) -> int:
         n = self._num_blocks
         per_vox = 4 + 4 + (12 if self._color_pool is not None else 0)
-        return int(n * BLOCK3 * per_vox)
+        geom = int(n * BLOCK3 * per_vox)
+        feat = int(self._num_feat_voxels * self.cfg.feature_dim * 4) if self._store_features else 0
+        return geom + feat
+
+    def feat_memory_bytes(self) -> int:
+        return int(self._num_feat_voxels * self.cfg.feature_dim * 4) if self._store_features else 0
 
     def _ensure_capacity(self, need: int) -> None:
         if need <= self._capacity:
@@ -157,7 +202,29 @@ class BlockHashTSDF:
             new_c = torch.zeros((new_cap, BLOCK3, 3), dtype=torch.float32, device=self.device)
             new_c[:n] = self._color_pool[:n]
             self._color_pool = new_c
+        if self._store_features:
+            new_fs = torch.full((new_cap, BLOCK3), -1, dtype=torch.int32, device=self.device)
+            new_fs[:n] = self._feat_voxel_slot[:n]
+            self._feat_voxel_slot = new_fs
         self._capacity = new_cap
+
+    def _ensure_feat_capacity(self, need: int) -> None:
+        if not self._store_features or need <= self._feat_capacity:
+            return
+        new_cap = self._feat_capacity
+        while new_cap < need:
+            new_cap *= 2
+        new_cap = min(new_cap, self.cfg.max_feat_capacity)
+        if new_cap < need:
+            raise RuntimeError(
+                f"feat pool exhausted: need {need}, cap={self.cfg.max_feat_capacity}"
+            )
+        new_pool = torch.zeros(
+            (new_cap, self.cfg.feature_dim), dtype=torch.float32, device=self.device
+        )
+        new_pool[: self._num_feat_voxels] = self._feat_pool[: self._num_feat_voxels]
+        self._feat_pool = new_pool
+        self._feat_capacity = new_cap
 
     def reset(self) -> None:
         self._block_slot.fill_(-1)
@@ -166,10 +233,19 @@ class BlockHashTSDF:
         self._weight_pool.zero_()
         if self._color_pool is not None:
             self._color_pool.zero_()
+        if self._store_features:
+            self._feat_voxel_slot.fill_(-1)
+            self._feat_pool.zero_()
+            self._num_feat_voxels = 0
 
     # -------------------------------------------------------------- integrate
     @torch.no_grad()
-    def integrate(self, frame: RGBDFrame) -> None:
+    def integrate(
+        self,
+        frame: RGBDFrame,
+        feature: torch.Tensor | None = None,
+        dense_feature_map: torch.Tensor | None = None,
+    ) -> None:
         """Frustum-culled integrate.
 
         Stage 1: cheap per-BLOCK cull against the camera frustum (block
@@ -294,6 +370,55 @@ class BlockHashTSDF:
             c_old = self._color_pool[voxel_slot, local_flat]
             c_new = (c_old * w_old.unsqueeze(-1) + c_samp) / (w_old + 1.0).unsqueeze(-1)
             self._color_pool[voxel_slot, local_flat] = c_new
+
+        # Per-voxel feature update (optional). Gate to near-surface voxels so
+        # free-space voxels in front of a surface don't steal features.
+        if self._store_features and (feature is not None or dense_feature_map is not None):
+            near = t_samp.abs() <= 1.0
+            sel = near.nonzero(as_tuple=False).squeeze(-1)
+            if sel.numel() > 0:
+                vs_sel = voxel_slot[sel]
+                lf_sel = local_flat[sel]
+                w_sel = w_old[sel]
+                # feature sample per selected voxel
+                if dense_feature_map is not None:
+                    dfm = dense_feature_map.to(torch.float32).to(self.device)
+                    if dfm.shape[:2] != (H, W):
+                        raise ValueError(
+                            f"dense_feature_map {tuple(dfm.shape[:2])} != depth {(H, W)}"
+                        )
+                    feat_sample = dfm[v_s[idx_flat[sel]], u_s[idx_flat[sel]], :]
+                else:
+                    if feature.shape != (self.cfg.feature_dim,):
+                        raise ValueError(
+                            f"feature must be ({self.cfg.feature_dim},), got {tuple(feature.shape)}"
+                        )
+                    f = feature.to(torch.float32).to(self.device)
+                    feat_sample = f.unsqueeze(0).expand(sel.numel(), -1).contiguous()
+
+                # Allocate feature-voxel slots on first touch
+                old_fslots = self._feat_voxel_slot[vs_sel, lf_sel]
+                unalloc = old_fslots < 0
+                n_new = int(unalloc.sum().item())
+                if n_new > 0:
+                    self._ensure_feat_capacity(self._num_feat_voxels + n_new)
+                    new_ids = torch.arange(
+                        self._num_feat_voxels,
+                        self._num_feat_voxels + n_new,
+                        device=self.device,
+                        dtype=torch.int32,
+                    )
+                    # scatter new slot ids into the (block_row, local_flat) grid
+                    self._feat_voxel_slot[vs_sel[unalloc], lf_sel[unalloc]] = new_ids
+                    self._num_feat_voxels += n_new
+                    old_fslots = self._feat_voxel_slot[vs_sel, lf_sel]
+
+                fslot_long = old_fslots.long()
+                f_old_pool = self._feat_pool[fslot_long]
+                f_merged = (f_old_pool * w_sel.unsqueeze(-1) + feat_sample) / (
+                    w_sel + 1.0
+                ).unsqueeze(-1)
+                self._feat_pool.index_copy_(0, fslot_long, f_merged)
 
     # ------------------------------------------------------------ densify
     @torch.no_grad()
