@@ -56,8 +56,18 @@ def fuse(
     config: Path = typer.Option(..., "--config", "-c"),
     output: Path = typer.Option(Path("outputs/mesh.ply"), "--output", "-o"),
 ) -> None:
-    """Ingest a dataset and save a TSDF mesh. [Phase 1]"""
-    raise typer.Exit(code=2)  # implemented in Phase 1
+    """Ingest a dataset and save a TSDF mesh."""
+    import logging
+
+    from openvocab_tsdf.config import load_config
+    from openvocab_tsdf.pipeline import fuse_dataset
+
+    logging.basicConfig(level="INFO", format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    cfg = load_config(config)
+    mesh = fuse_dataset(cfg, output)
+    console.print(
+        f"[green]fused[/green] {len(mesh.vertices)} verts / {len(mesh.triangles)} tris -> {output}"
+    )
 
 
 @app.command()

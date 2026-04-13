@@ -36,6 +36,12 @@ class MappingConfig(BaseModel):
     store_color: bool = True
     store_features: bool = True
     feature_dim: int = 512
+    # Dense-reference backend needs axis-aligned bounds. Leave None to auto-fit
+    # from the dataset's first-pose + a configured radius.
+    bounds_min: tuple[float, float, float] | None = None
+    bounds_max: tuple[float, float, float] | None = None
+    auto_bounds_radius_m: float = 4.0
+    max_weight: float = 32.0
 
 
 class SemanticsConfig(BaseModel):

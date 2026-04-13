@@ -25,6 +25,10 @@ mapping:
   store_color: true
   store_features: true
   feature_dim: 512             # matches OpenCLIP ViT-B/16
+  bounds_min: null             # auto-fit from first pose
+  bounds_max: null
+  auto_bounds_radius_m: 4.0    # used when bounds are null
+  max_weight: 32.0
 
 semantics:
   model: ViT-B-16

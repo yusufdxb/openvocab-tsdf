@@ -14,8 +14,8 @@ camera:
   depth_trunc_m: 6.0
 
 mapping:
-  voxel_size_m: 0.02
-  truncation_distance_m: 0.1
+  voxel_size_m: 0.03           # larger voxels for a first pass; drop to 0.02 later
+  truncation_distance_m: 0.15
   hash_capacity: 1048576
   block_size: 8
   backend: reference
@@ -23,6 +23,10 @@ mapping:
   store_color: true
   store_features: false   # geometry-only sanity run; flip to true in Phase 2
   feature_dim: 512
+  bounds_min: null
+  bounds_max: null
+  auto_bounds_radius_m: 5.0
+  max_weight: 32.0
 
 semantics:
   model: ViT-B-16
