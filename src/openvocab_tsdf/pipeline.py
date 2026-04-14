@@ -150,20 +150,25 @@ def encode_and_fuse(
 ) -> dict:
     """Encode each frame with OpenCLIP and fuse geometry + features.
 
-    Global-mode features work with both the dense `reference` backend and the
-    `sparse_feature` backend. Patch mode only works with `reference` today
+    Global-mode features work with all three feature-storing backends
+    (`reference`, `sparse_feature`, `block_hash`). SAM-dense works with
+    `reference` and `block_hash`. Patch mode only works with `reference` today
     (sparse patch aggregation is future work).
     """
+    from openvocab_tsdf.mapping.block_hash import BlockHashTSDF
     from openvocab_tsdf.mapping.sparse_reference import SparseFeatureTSDF
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
     m = cfg.mapping
     mode = cfg.semantics.mode
-    if m.backend not in ("reference", "sparse_feature"):
+    if m.backend not in ("reference", "sparse_feature", "block_hash"):
         log.warning("backend %r does not support feature storage; forcing reference", m.backend)
         m.backend = "reference"  # fall through
     if mode in ("patch", "sam_dense") and m.backend == "sparse_feature":
         log.warning("sparse_feature backend does not support %r mode yet; forcing global", mode)
+        mode = "global"
+    if mode == "patch" and m.backend == "block_hash":
+        log.warning("block_hash backend does not support patch mode yet; forcing global")
         mode = "global"
 
     # Build the volume using `build_tsdf` (shared path with fuse)
@@ -182,8 +187,8 @@ def encode_and_fuse(
         m.bounds_min = bmin
         m.bounds_max = bmax
 
-    # build the volume using the selected backend (but only reference +
-    # sparse_feature reach this path)
+    # build the volume using the selected backend (reference,
+    # sparse_feature, or block_hash reach this path)
     if m.backend == "sparse_feature":
         from openvocab_tsdf.mapping.sparse_reference import (
             SparseFeatureTSDFConfig,
@@ -201,6 +206,24 @@ def encode_and_fuse(
                 initial_feat_capacity=m.initial_feat_capacity,
                 max_feat_capacity=m.max_feat_capacity,
                 feat_update_backend=m.feat_update_backend,
+                device=m.device,
+            )
+        )
+    elif m.backend == "block_hash":
+        from openvocab_tsdf.mapping.block_hash import BlockHashTSDFConfig
+
+        vol = BlockHashTSDF(
+            BlockHashTSDFConfig(
+                voxel_size_m=m.voxel_size_m,
+                truncation_distance_m=m.truncation_distance_m,
+                bounds_min=tuple(m.bounds_min),
+                bounds_max=tuple(m.bounds_max),
+                max_weight=m.max_weight,
+                store_color=m.store_color,
+                store_features=True,
+                feature_dim=m.feature_dim,
+                initial_feat_capacity=m.initial_feat_capacity,
+                max_feat_capacity=m.max_feat_capacity,
                 device=m.device,
             )
         )
@@ -278,13 +301,11 @@ def encode_and_fuse(
         torch.cuda.synchronize()
     fuse_s = time.perf_counter() - t0
 
-    # save map — sparse backends save a compact pool + slot table, dense backends
-    # save the full dense feature array.
+    # save map — each backend serialises the subset of fields it owns.
+    # `sparse_kind` ("dense" / "voxel_slot" / "block_hash") selects the load path.
+    # `sparse` stays as a bool for back-compat with maps saved before sparse_kind existed.
     map_out.parent.mkdir(parents=True, exist_ok=True)
     save_kwargs = {
-        "tsdf": vol.tsdf.cpu().numpy(),
-        "weight": vol.weight.cpu().numpy(),
-        "color": vol.color.cpu().numpy() if vol.color is not None else np.zeros(0),
         "origin": vol.origin.cpu().numpy(),
         "voxel_size": np.float32(vol.voxel_size_m),
         "truncation": np.float32(vol.truncation_distance_m),
@@ -294,9 +315,38 @@ def encode_and_fuse(
         "pretrained": np.array(cfg.semantics.pretrained, dtype=object),
         "mode": np.array(mode, dtype=object),
     }
-    if isinstance(vol, SparseFeatureTSDF):
+    if isinstance(vol, BlockHashTSDF):
+        from openvocab_tsdf.mapping.block_hash import BLOCK3
+
+        nb = vol.num_allocated_blocks
+        nfv = vol.num_allocated_feat_voxels
+        save_kwargs["sparse"] = np.bool_(True)
+        save_kwargs["sparse_kind"] = np.array("block_hash", dtype=object)
+        save_kwargs["block_dims"] = np.int64(vol.block_dims)
+        save_kwargs["block_slot"] = vol._block_slot.cpu().numpy()
+        save_kwargs["tsdf_pool"] = vol._tsdf_pool[:nb].cpu().numpy()
+        save_kwargs["weight_pool"] = vol._weight_pool[:nb].cpu().numpy()
+        if vol._color_pool is not None:
+            save_kwargs["color_pool"] = vol._color_pool[:nb].cpu().numpy()
+        if vol._store_features:
+            save_kwargs["feat_voxel_slot"] = vol._feat_voxel_slot[:nb].cpu().numpy()
+            save_kwargs["feat_pool"] = vol._feat_pool[:nfv].cpu().numpy()
+        geom_mb = nb * BLOCK3 * (4 + 4 + (12 if vol._color_pool is not None else 0)) / (1024**2)
+        feat_mb = nfv * encoder.feature_dim * 4 / (1024**2) if vol._store_features else 0.0
+        log.info(
+            "saving block_hash map: %d blocks / %d feat voxels, %.1f MB geom + %.1f MB feat",
+            nb,
+            nfv,
+            geom_mb,
+            feat_mb,
+        )
+    elif isinstance(vol, SparseFeatureTSDF):
+        save_kwargs["tsdf"] = vol.tsdf.cpu().numpy()
+        save_kwargs["weight"] = vol.weight.cpu().numpy()
+        save_kwargs["color"] = vol.color.cpu().numpy() if vol.color is not None else np.zeros(0)
         n = vol.num_allocated_feat_voxels
         save_kwargs["sparse"] = np.bool_(True)
+        save_kwargs["sparse_kind"] = np.array("voxel_slot", dtype=object)
         save_kwargs["feat_pool"] = vol._feat_pool[:n].cpu().numpy()
         save_kwargs["voxel_slot"] = vol._voxel_slot.cpu().numpy()
         log.info(
@@ -305,7 +355,11 @@ def encode_and_fuse(
             n * encoder.feature_dim * 4 / (1024**2),
         )
     else:
+        save_kwargs["tsdf"] = vol.tsdf.cpu().numpy()
+        save_kwargs["weight"] = vol.weight.cpu().numpy()
+        save_kwargs["color"] = vol.color.cpu().numpy() if vol.color is not None else np.zeros(0)
         save_kwargs["sparse"] = np.bool_(False)
+        save_kwargs["sparse_kind"] = np.array("dense", dtype=object)
         save_kwargs["feat"] = vol.feat.cpu().numpy()
     np.savez_compressed(map_out, **save_kwargs)
 
@@ -349,13 +403,68 @@ def ground_text(
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
     data = np.load(map_path, allow_pickle=True)
-    weight = torch.from_numpy(data["weight"]).to(device)
-    tsdf = torch.from_numpy(data["tsdf"]).to(device) if "tsdf" in data.files else None
     origin = data["origin"]
     voxel_size = float(data["voxel_size"])
+    sparse_kind = (
+        str(data["sparse_kind"])
+        if "sparse_kind" in data.files
+        else ("voxel_slot" if ("sparse" in data.files and bool(data["sparse"])) else "dense")
+    )
 
-    is_sparse = bool(data["sparse"]) if "sparse" in data.files else False
-    if is_sparse:
+    encoder = OpenCLIPEncoder(
+        OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
+    )
+    texts = [query] + ([negative_query] if negative_query else [])
+    emb = encoder.encode_texts(texts)
+    q = emb[0]
+    neg = emb[1] if negative_query else None
+
+    if sparse_kind == "block_hash":
+        from openvocab_tsdf.mapping.block_hash import (
+            densify_block_pool,
+            scatter_feat_pool_values,
+        )
+
+        dims = tuple(int(d) for d in data["dims"])
+        block_dims = tuple(int(d) for d in data["block_dims"])
+        block_slot = torch.from_numpy(data["block_slot"]).to(device)
+        tsdf_pool = torch.from_numpy(data["tsdf_pool"]).to(device)
+        weight_pool = torch.from_numpy(data["weight_pool"]).to(device)
+        tsdf = densify_block_pool(block_slot, tsdf_pool, dims, block_dims, default=1.0)
+        weight = densify_block_pool(block_slot, weight_pool, dims, block_dims, default=0.0)
+        # Score features via the feat pool and scatter back through the double
+        # indirection into a dense (Nx, Ny, Nz) scores tensor. Avoids ever
+        # materialising the 4-D feature volume.
+        feat_voxel_slot = torch.from_numpy(data["feat_voxel_slot"]).to(device)
+        feat_pool = torch.from_numpy(data["feat_pool"]).to(device)
+        pool_scores = feat_pool @ q
+        if neg is not None:
+            pool_scores = pool_scores - feat_pool @ neg
+        scores_vol = scatter_feat_pool_values(
+            block_slot, feat_voxel_slot, pool_scores, dims, default=-1e4
+        )
+        return rank_query(
+            voxel_feats=None,
+            voxel_weights=weight,
+            voxel_tsdf=tsdf,
+            text_embedding=None,
+            precomputed_scores=scores_vol,
+            origin=origin,
+            voxel_size=voxel_size,
+            min_weight=min_weight,
+            score_threshold=score_threshold,
+            top_percentile=top_percentile,
+            cluster_eps_vox=cluster_eps_vox,
+            min_cluster_voxels=min_cluster_voxels,
+            top_k=top_k,
+            scene_mean_subtract=scene_mean_subtract,
+        )
+
+    # "voxel_slot" (sparse_feature) or "dense" (reference).
+    weight = torch.from_numpy(data["weight"]).to(device)
+    tsdf = torch.from_numpy(data["tsdf"]).to(device) if "tsdf" in data.files else None
+
+    if sparse_kind == "voxel_slot":
         dims = tuple(int(d) for d in data["dims"])
         D = int(data["feature_dim"])
         slot = torch.from_numpy(data["voxel_slot"]).to(device)
@@ -366,14 +475,6 @@ def ground_text(
         feat = feat.view(*dims, D)
     else:
         feat = torch.from_numpy(data["feat"]).to(device)
-
-    encoder = OpenCLIPEncoder(
-        OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
-    )
-    texts = [query] + ([negative_query] if negative_query else [])
-    emb = encoder.encode_texts(texts)
-    q = emb[0]
-    neg = emb[1] if negative_query else None
 
     return rank_query(
         voxel_feats=feat,

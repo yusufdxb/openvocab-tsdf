@@ -37,6 +37,108 @@ BLOCK = 8
 BLOCK3 = BLOCK * BLOCK * BLOCK
 
 
+# ------------------------------------------------------------ load-side helpers
+# These operate on the raw saved tensors (no BlockHashTSDF instance required),
+# so the eval / heatmap / ground paths can materialise dense views directly
+# from the npz. They are the inverse of the save path in `pipeline.encode_and_fuse`.
+
+
+def densify_block_pool(
+    block_slot: torch.Tensor,
+    pool: torch.Tensor,
+    dims: tuple[int, int, int],
+    block_dims: tuple[int, int, int],
+    default: float = 0.0,
+) -> torch.Tensor:
+    """Scatter a per-(block_row, local_flat) pool into a dense volume.
+
+    Input shapes:
+      block_slot: (Nbx, Nby, Nbz) int32 with -1 = unallocated block
+      pool:       (NumBlocks, BLOCK3) or (NumBlocks, BLOCK3, C)
+
+    Returns (Nx, Ny, Nz) or (Nx, Ny, Nz, C) with `default` filling unallocated
+    blocks. Memory is O(volume), so this is appropriate at room scale but will
+    OOM on warehouse-scale maps — the grounding path there should stay sparse.
+    """
+    Nx, Ny, Nz = dims
+    Nbx, Nby, Nbz = block_dims
+    device = pool.device
+    if pool.dim() == 2:
+        # scalar pool → (Nx, Ny, Nz)
+        out = torch.full((Nbx, Nby, Nbz, BLOCK3), float(default), dtype=pool.dtype, device=device)
+        alloc = block_slot >= 0
+        if alloc.any():
+            out[alloc] = pool[block_slot[alloc].long()]
+        dense = out.view(Nbx, Nby, Nbz, BLOCK, BLOCK, BLOCK).permute(0, 3, 1, 4, 2, 5)
+        return dense.reshape(Nx, Ny, Nz).contiguous()
+    if pool.dim() == 3:
+        # channel pool → (Nx, Ny, Nz, C)
+        C = pool.shape[-1]
+        out = torch.full(
+            (Nbx, Nby, Nbz, BLOCK3, C), float(default), dtype=pool.dtype, device=device
+        )
+        alloc = block_slot >= 0
+        if alloc.any():
+            out[alloc] = pool[block_slot[alloc].long()]
+        dense = out.view(Nbx, Nby, Nbz, BLOCK, BLOCK, BLOCK, C).permute(0, 3, 1, 4, 2, 5, 6)
+        return dense.reshape(Nx, Ny, Nz, C).contiguous()
+    raise ValueError(f"densify_block_pool: pool must be 2-D or 3-D, got {pool.dim()}-D")
+
+
+def scatter_feat_pool_values(
+    block_slot: torch.Tensor,
+    feat_voxel_slot: torch.Tensor,
+    pool_values: torch.Tensor,
+    dims: tuple[int, int, int],
+    default: float = -1e4,
+) -> torch.Tensor:
+    """Scatter per-feature-voxel values through the double indirection into
+    a dense (Nx, Ny, Nz) volume.
+
+    Input shapes:
+      block_slot:      (Nbx, Nby, Nbz) int32
+      feat_voxel_slot: (NumBlocks, BLOCK3) int32 with -1 = voxel has no feature
+      pool_values:     (NumFeatVoxels,) — usually a pre-computed score vector
+                       (feat_pool @ query) rather than the raw D-dim features,
+                       which lets us keep memory O(NumFeatVoxels) instead of
+                       O(NumFeatVoxels * D).
+
+    Returns (Nx, Ny, Nz) float32, filling unobserved voxels with `default`.
+    """
+    Nx, Ny, Nz = dims
+    device = pool_values.device
+    dense = torch.full((Nx, Ny, Nz), float(default), dtype=pool_values.dtype, device=device)
+
+    # Inverse map: block_row -> (bx, by, bz) allocated block coords.
+    alloc_bx, alloc_by, alloc_bz = torch.where(block_slot >= 0)
+    if alloc_bx.numel() == 0:
+        return dense
+    alloc_rows = block_slot[alloc_bx, alloc_by, alloc_bz].long()
+    num_blocks = int(feat_voxel_slot.shape[0])
+    inv = torch.zeros((num_blocks, 3), dtype=torch.int64, device=device)
+    inv[alloc_rows, 0] = alloc_bx.to(torch.int64)
+    inv[alloc_rows, 1] = alloc_by.to(torch.int64)
+    inv[alloc_rows, 2] = alloc_bz.to(torch.int64)
+
+    # Every (row, local_flat) with feat_voxel_slot >= 0
+    valid = feat_voxel_slot >= 0
+    if not valid.any():
+        return dense
+    rows, locals_ = valid.nonzero(as_tuple=True)
+    bx = inv[rows, 0]
+    by = inv[rows, 1]
+    bz = inv[rows, 2]
+    li = torch.div(locals_, 64, rounding_mode="floor")
+    lj = torch.div(locals_, 8, rounding_mode="floor") % 8
+    lk = locals_ % 8
+    ix = (bx * BLOCK + li).to(torch.int64)
+    iy = (by * BLOCK + lj).to(torch.int64)
+    iz = (bz * BLOCK + lk).to(torch.int64)
+    fslots = feat_voxel_slot[rows, locals_].long()
+    dense[ix, iy, iz] = pool_values[fslots]
+    return dense
+
+
 @dataclass
 class BlockHashTSDFConfig:
     voxel_size_m: float = 0.04

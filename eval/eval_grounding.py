@@ -56,20 +56,43 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
     device = spec.get("device", "cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = spec.get("dtype", "fp16" if torch.cuda.is_available() else "fp32")
 
-    weight = torch.from_numpy(data["weight"]).to(device)
     origin = data["origin"]
     voxel_size = float(data["voxel_size"])
+    sparse_kind = (
+        str(data["sparse_kind"])
+        if "sparse_kind" in data.files
+        else ("voxel_slot" if ("sparse" in data.files and bool(data["sparse"])) else "dense")
+    )
+    is_sparse = sparse_kind != "dense"
 
-    is_sparse = bool(data["sparse"]) if "sparse" in data.files else False
-    if is_sparse:
+    block_slot = None
+    feat_voxel_slot = None
+    feat_pool_bh = None
+    slot = None
+    pool = None
+    feat = None
+    if sparse_kind == "block_hash":
+        from openvocab_tsdf.mapping.block_hash import densify_block_pool
+
+        dims = tuple(int(d) for d in data["dims"])
+        block_dims = tuple(int(d) for d in data["block_dims"])
+        block_slot = torch.from_numpy(data["block_slot"]).to(device)
+        tsdf_pool = torch.from_numpy(data["tsdf_pool"]).to(device)
+        weight_pool_t = torch.from_numpy(data["weight_pool"]).to(device)
+        weight = densify_block_pool(block_slot, weight_pool_t, dims, block_dims, default=0.0)
+        # Keep tsdf_dense around too (currently unused by rank_query through
+        # precomputed_scores, but saves a round-trip if we need it later).
+        _ = densify_block_pool(block_slot, tsdf_pool, dims, block_dims, default=1.0)
+        feat_voxel_slot = torch.from_numpy(data["feat_voxel_slot"]).to(device)
+        feat_pool_bh = torch.from_numpy(data["feat_pool"]).to(device)
+    elif sparse_kind == "voxel_slot":
+        weight = torch.from_numpy(data["weight"]).to(device)
         dims = tuple(int(d) for d in data["dims"])
         slot = torch.from_numpy(data["voxel_slot"]).to(device)
         pool = torch.from_numpy(data["feat_pool"]).to(device)
-        feat = None  # sparse path: scores computed via pool
     else:
+        weight = torch.from_numpy(data["weight"]).to(device)
         feat = torch.from_numpy(data["feat"]).to(device)
-        slot = None
-        pool = None
         dims = tuple(feat.shape[:3])
 
     encoder = OpenCLIPEncoder(
@@ -98,17 +121,27 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
             q = encoder.encode_texts([q_text])[0]
             neg_e = None
         if is_sparse:
-            # Sparse: score only the observed voxels via the pool, scatter into
-            # a dense (Nx,Ny,Nz) scores tensor (22 MB at 5.6M voxels).
-            scores_flat = torch.full(
-                (dims[0] * dims[1] * dims[2],), -1e4, dtype=torch.float32, device=device
-            )
-            alloc = slot.view(-1) >= 0
-            pool_scores = pool @ q
-            if neg_e is not None:
-                pool_scores = pool_scores - pool @ neg_e
-            scores_flat[alloc] = pool_scores[slot.view(-1)[alloc].long()]
-            scores_vol = scores_flat.view(*dims)
+            if sparse_kind == "block_hash":
+                from openvocab_tsdf.mapping.block_hash import scatter_feat_pool_values
+
+                pool_scores = feat_pool_bh @ q
+                if neg_e is not None:
+                    pool_scores = pool_scores - feat_pool_bh @ neg_e
+                scores_vol = scatter_feat_pool_values(
+                    block_slot, feat_voxel_slot, pool_scores, dims, default=-1e4
+                )
+            else:
+                # voxel_slot sparse: score only the observed voxels via the pool,
+                # scatter into a dense (Nx,Ny,Nz) scores tensor (22 MB at 5.6M voxels).
+                scores_flat = torch.full(
+                    (dims[0] * dims[1] * dims[2],), -1e4, dtype=torch.float32, device=device
+                )
+                alloc = slot.view(-1) >= 0
+                pool_scores = pool @ q
+                if neg_e is not None:
+                    pool_scores = pool_scores - pool @ neg_e
+                scores_flat[alloc] = pool_scores[slot.view(-1)[alloc].long()]
+                scores_vol = scores_flat.view(*dims)
             results = rank_query(
                 voxel_feats=None,
                 voxel_weights=weight,
