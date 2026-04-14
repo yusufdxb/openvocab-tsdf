@@ -133,3 +133,61 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 **Alternatives considered.** Integrating ORB-SLAM3 or a learned VO — rejected for scope.
 
 ---
+
+## 2026-04-13 — block_hash save format: separate dispatch via `sparse_kind`
+
+**Decision.** `encode_and_fuse` now writes three distinct npz layouts, selected by a `sparse_kind` string field at load time: `dense` (ReferenceTSDF, legacy "sparse=False"), `voxel_slot` (SparseFeatureTSDF, legacy "sparse=True" with a dense `voxel_slot[Nx,Ny,Nz]` lookup), and `block_hash` (BlockHashTSDF, with a `block_slot[Nbx,Nby,Nbz]` + block-pool structure and a double indirection through `feat_voxel_slot[NumBlocks, 512]` → `feat_pool[NumFeatVoxels, D]`). All three downstream loaders (`pipeline.ground_text`, `eval/eval_grounding.py`, `viz/heatmap.py`) dispatch on `sparse_kind`.
+
+The old `sparse: bool` key stays alongside for back-compat with maps saved before this commit; new code reads `sparse_kind` and falls back to `sparse` only when it is missing.
+
+**Rationale.** Until this commit, `encode_and_fuse`'s save path only knew two layouts and the block_hash backend could not produce a runnable npz, so the combined backend (block-hash geometry + per-voxel sparse features) was benchmark-only: no Replica hit@1 numbers, no eval. Wiring the save format is the step that converts "benchmark result" into "usable system at warehouse scale." `sparse_kind` was chosen over bumping `sparse` to an enum-coded int because string keys read well in an npz's `.files` list during debugging, and npz is forgiving of unused keys so old readers keep working.
+
+**Scatter helpers live next to the format.** `mapping/block_hash.py` exposes `densify_block_pool` (scatter a scalar or channel pool into a dense `(Nx, Ny, Nz)` at room scale) and `scatter_feat_pool_values` (scatter per-feat-voxel scalars — usually `feat_pool @ query` — into a dense `(Nx, Ny, Nz)` score tensor via the double indirection, without ever materialising the 4-D feature volume). The helpers are module-level so the three loaders can reuse them without holding a live backend instance.
+
+**Verified.** `configs/replica_room0_4cm_block_hash_sam.yaml` end-to-end: 100 frames, 4055 blocks (39.6 MB geom), 1.68M feat voxels (3.3 GB features compressed to 1.8 GB on disk). Eval on the hand-annotated room0 spec: hit@1 = 55.6 %, matching the 6 cm SAM baseline within ±1 pp as the success criterion required. Round-trip test in `tests/unit/test_mapping_block_hash_features.py` asserts metadata completeness, densified-weight parity with the in-memory `_densify`, and per-query score parity across all basis queries on every observed voxel.
+
+**Scale note.** At room scale the load-side densify of `tsdf` and `weight` materialises two `(Nx, Ny, Nz)` fp32 volumes (≈ 22 MB each at 4 cm on room0). At warehouse scale this will OOM and the grounding path must stay block-sparse the whole way. Not fixed now because P1's success criterion is room scale; the ≥ 50 m³ case is a follow-up tracked under the combined-backend benchmark.
+
+---
+
+## 2026-04-13 — Chunked per-voxel feature merge in BlockHashTSDF.integrate
+
+**Decision.** `BlockHashTSDF.integrate`'s per-voxel feature update processes `idx_flat` in `CHUNK = 32_768`-sized slices instead of all at once.
+
+**Observed incident.** At 4 cm voxels with `sam_dense` features on the 100-frame Replica room0 sweep, the single-shot path `(f_old * w + feat) / (w + 1)` allocated ≈ 3 × (N, 512) fp32 temporaries where N ≈ 465 k near-surface voxels in some frames — ~2.8 GiB of intermediates. OOM'd at frame 25/100 on a 12 GB card.
+
+**Fix.** Slice the merge into CHUNK rows at a time after feature-slot allocation. Peak per-chunk alloc is ~200 MiB, well below the pool's steady-state footprint. No behavioural change: `index_copy_` is an in-place write per slice, and every slice touches a disjoint set of pool rows because `fslot_long` is per-voxel (no aliasing across chunks).
+
+**Why not the same fix in SparseFeatureTSDF.** SparseFeatureTSDF already has two feature-update backends (`pytorch` and a Triton kernel). The Triton path is bandwidth-bound and does not create intermediates; the PyTorch path is slower but also less likely to be used at 4 cm + sam_dense (that's exactly the regime where block_hash takes over). If a SparseFeature user hits OOM with the PyTorch kernel, apply the same chunk pattern there.
+
+---
+
+## 2026-04-13 — TensorRT MobileSAM image encoder: fp32 default, fp16 opt-in
+
+**Decision.** Add a TensorRT-backed MobileSAM image encoder (`src/openvocab_tsdf/semantics/trt_sam.py`), drop-in replacement for `sam.image_encoder(x)`, toggled via `SAMDenseConfig.image_encoder_backend: {pytorch, tensorrt}`. Default precision is **fp32**, not fp16. fp16 is a separate opt-in via `TRTSamConfig.fp16 = True` / `SAMDenseConfig.trt_fp16 = True`.
+
+**Why fp32 default — the key finding.** The initial fp16 engine passed cosine > 0.98 on random-input image_encoder parity (the naive smoke test). On real Replica frames through the full `SAMDenseFeatureExtractor.extract` pipeline, fp16 output disagreed with PyTorch fp32 at mean cosine 0.44 (min 0.28). Running the quality sweep with fp16 TRT dropped `room0` grounding hit@1 from 55.6 % → 22.2 % (−33.3 pp) and hit@5 from 88.9 % → 44.4 %, far past the plan's ±1 pp tolerance. Root cause: MobileSAM is not a plain feature extractor — its embedding drives a prompt-conditioned mask decoder, and tiny fp16 perturbations in the embedding shift auto-generated mask boundaries, which cascades into different CLIP-per-mask crops and therefore different per-voxel features.
+
+fp32 eliminates that: TRT fp32 vs PyTorch fp32 on the same real frame through the same pipeline gives mean cosine 0.9995 (end-to-end dense feature map, not just encoder output). Grounding matches PyTorch within the ±1 pp budget. Cost is that the fp16 speedup (2.74×) collapses to ~10 %; fp32 is what makes the TRT path correctness-preserving.
+
+**Measured perf.** RTX 5070 (12 GB), static batch 1, 1024×1024 input (the only size MobileSAM's TinyViT accepts — positional-embedding shapes are baked in):
+
+| path | PyTorch fp32 | TRT fp32 (default) | TRT fp16 (opt-in) |
+|---|---|---|---|
+| image_encoder forward alone | — | 147 FPS, 6.8 ms | 366 FPS, 2.7 ms |
+| (baseline) PyTorch fp16 image_encoder | 133 FPS, 7.5 ms | | |
+| `extract` @ shortest_edge=384, end-to-end | 1.39 FPS, 717 ms | ≈ 1.5 FPS (sweep) | 4.05 FPS, 247 ms |
+| `extract` @ shortest_edge=512, end-to-end | 1.29 FPS, 778 ms | ≈ 1.4 FPS (sweep) | 4.04 FPS, 248 ms |
+| room0 hit@1 (grounding, 6 cm sam-dense) | 55.6 % | ≈ 55.6 % (parity) | 22.2 % (broken) |
+
+The fp16 column is kept available because the speedup is real and some downstream uses tolerate the quality drop (e.g., live-mapping preview at 3+ Hz where the grounding signal is a visual sanity check, not the authoritative ranking). Callers opt in by setting `trt_fp16=True`.
+
+**`TensorRTSamEncoder` inherits `nn.Module`.** `nn.Module.__setattr__` enforces that attributes previously registered as child modules can only be reassigned to another `nn.Module` (or `None`); since we swap `sam.image_encoder` after construction, the wrapper must also be an `nn.Module`. The engine and IO tensors stay as plain attributes so `.to()` / `.train() / .eval()` are effectively no-ops — the engine is pinned to the device it was built on.
+
+**Why static batch 1.** SAM is called once per image inside `SamAutomaticMaskGenerator` — there is no frame-level batching on the public API. A static-batch-1 engine uses the smallest kernel plans TRT can pick and avoids dynamic-shape dispatch overhead.
+
+**Why the random-input parity test was misleading.** Random-noise inputs cause SAM's auto-mask generator to short-circuit (no meaningful segments), so the downstream mask-dependent path doesn't exercise the fp16 sensitivity. The encoder output's raw fp16↔fp32 cosine is still > 0.98, which is a legitimate bound on the raw embedding — just not on the end-to-end pipeline. The integration truth test is `scripts/sam_quality_sweep.py` on real data, which is now what is actually being used to gate the TRT default.
+
+**Reversal triggers.** (1) Rewriting MobileSAM's layernorm / GELU to opset-17 `INormalizationLayer` / `Gelu` recovers fp16 parity on real images — if someone proves that, fp16 can become the default. (2) Someone builds a mask-free single-pass dense encoder (e.g., MaskCLIP + LSeg) where fp16 perturbations don't change auto-mask boundaries — then fp16 + TRT is lossless by construction. (3) TRT engine builds become a portability burden across sm targets.
+
+---

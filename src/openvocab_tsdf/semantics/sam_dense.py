@@ -41,6 +41,18 @@ class SAMDenseConfig:
     clip_batch_size: int = 32
     clip_crop_margin_px: int = 8
     device: str = "cuda:0"
+    # Which backend runs MobileSAM's `image_encoder` forward. "pytorch" uses
+    # the stock TinyViT in fp16; "tensorrt" swaps in a pre-built fp16 TRT
+    # engine (see `trt_sam.py`). The rest of SAM (prompt encoder, mask
+    # decoder, auto-mask post-processing) stays unchanged either way.
+    image_encoder_backend: str = "pytorch"  # or "tensorrt"
+    # Default TRT engine path + precision match `TRTSamConfig` (fp32). fp16
+    # is available as an opt-in (big speedup, real grounding regression);
+    # see `trt_sam.py` for the details.
+    trt_engine_path: Path = Path("outputs/trt/mobile_sam_vit_t_fp32.engine")
+    trt_onnx_path: Path = Path("outputs/trt/mobile_sam_vit_t_fp32.onnx")
+    trt_fp16: bool = False
+    trt_build_on_missing: bool = True
 
 
 class SAMDenseFeatureExtractor:
@@ -60,6 +72,13 @@ class SAMDenseFeatureExtractor:
         sam = sam_model_registry[cfg.sam_model_type](checkpoint=str(cfg.sam_weights_path))
         sam = sam.to(self.device).eval()
         self.sam = sam
+        if cfg.image_encoder_backend == "tensorrt":
+            self._install_tensorrt_image_encoder()
+        elif cfg.image_encoder_backend != "pytorch":
+            raise ValueError(
+                f"image_encoder_backend must be 'pytorch' or 'tensorrt', "
+                f"got {cfg.image_encoder_backend!r}"
+            )
         self.mask_generator = SamAutomaticMaskGenerator(
             model=sam,
             points_per_side=cfg.points_per_side,
@@ -67,6 +86,39 @@ class SAMDenseFeatureExtractor:
             stability_score_thresh=cfg.stability_score_thresh,
             min_mask_region_area=cfg.min_mask_region_area,
         )
+
+    def _install_tensorrt_image_encoder(self) -> None:
+        """Swap MobileSAM's image_encoder for a pre-built TRT engine.
+
+        Downstream SAM code only touches `sam.image_encoder(x)`, so a callable
+        with the same signature is a drop-in replacement. `TensorRTSamEncoder`
+        also exposes `.img_size`, which `SamAutomaticMaskGenerator` reads.
+        """
+        from openvocab_tsdf.semantics.trt_sam import (
+            TensorRTSamEncoder,
+            TRTSamConfig,
+            build_engine_from_mobile_sam,
+        )
+
+        trt_cfg = TRTSamConfig(
+            sam_weights_path=self.cfg.sam_weights_path,
+            sam_model_type=self.cfg.sam_model_type,
+            engine_path=self.cfg.trt_engine_path,
+            onnx_path=self.cfg.trt_onnx_path,
+            fp16=self.cfg.trt_fp16,
+            device=self.cfg.device,
+        )
+        if trt_cfg.engine_path.exists():
+            trt_enc = TensorRTSamEncoder(trt_cfg)
+        elif self.cfg.trt_build_on_missing:
+            trt_enc = build_engine_from_mobile_sam(trt_cfg)
+        else:
+            raise FileNotFoundError(
+                f"TRT engine missing at {trt_cfg.engine_path} and " "trt_build_on_missing=False"
+            )
+        # The mask generator caches `predictor.model.image_encoder` at call time,
+        # so replacing the attribute on `sam` is sufficient.
+        self.sam.image_encoder = trt_enc
 
     @torch.no_grad()
     def extract(self, rgb: np.ndarray) -> np.ndarray:

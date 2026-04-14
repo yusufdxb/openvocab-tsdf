@@ -98,6 +98,32 @@ Fig: `figures/room0_sam/a_sofa.png` — the top-brightness-quartile heatmap voxe
 - PyTorch: **1280 FPS**
 - TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.
 
+**MobileSAM image encode (TinyViT @ 1024×1024, batch 1):**
+
+| path | FPS | ms/frame | grounding hit@1 (room0 6cm SAM) |
+|---|---|---|---|
+| PyTorch fp32 (reference) | ~133 | 7.5 | 55.6 % |
+| **TensorRT fp32 (default)** | **147** | **6.8** | **≈ 55.6 % (parity)** |
+| TensorRT fp16 (opt-in) | 366 | 2.7 | **22.2 %** (broken) |
+
+fp16 is 2.74× on the raw encoder but MobileSAM is not a plain feature extractor — its embedding drives a prompt-conditioned mask decoder, and fp16 perturbations shift auto-generated mask boundaries enough to drop end-to-end grounding hit@1 on real Replica frames by ~33 pp. TRT fp32 preserves parity (mean cos 0.9995 vs PyTorch fp32 through the full `extract` pipeline) and still gives ~10 % speedup; it is the default. Toggle with `SAMDenseConfig.image_encoder_backend: tensorrt`, opt into fp16 via `trt_fp16: True` only when 3× FPS matters more than grounding quality (e.g., a live-mapping preview). See `benchmarks/bench_sam_encode.py` and `docs/decisions.md`.
+
+**Block-hash + SAM-dense + per-voxel sparse features on Replica room0 (4 cm voxels, 100 frames):**
+
+Combined backend (block-hash geometry + voxel-slot features + SAM-dense semantics). First full-pipeline Replica eval with a non-dense mapping backend.
+
+| metric | value | baseline (6 cm SAM, reference) | delta |
+|---|---|---|---|
+| hit@1 | 55.6 % | 55.6 % | +0.0 pp |
+| hit@5 | 77.8 % | 88.9 % | −11.1 pp |
+| allocated blocks | 4 055 | n/a | |
+| allocated feat voxels | 1 679 613 | n/a | |
+| geometry storage | 39.6 MB | ~80 MB (dense 4 cm) | |
+| feature storage | 3 280 MB | ≫ that if dense at 4 cm | |
+| encode + fuse | 175 s / 100 frames | baseline | |
+
+hit@5 drop at the finer voxel size is from smaller, more-competing clusters; hit@1 matches exactly — the combined backend is correctness-preserving while the geometry cost drops to the observed-block count. `configs/replica_room0_4cm_block_hash_sam.yaml`.
+
 **Block-hash sparse *geometry* (`BlockHashTSDF`) — 12 m³ cube, 4 cm voxels, 24 synthetic frames:**
 
 | backend | geom storage | allocated blocks | peak VRAM | integrate |
