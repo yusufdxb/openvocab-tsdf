@@ -515,12 +515,21 @@ class BlockHashTSDF:
                     self._num_feat_voxels += n_new
                     old_fslots = self._feat_voxel_slot[vs_sel, lf_sel]
 
+                # Chunked merge: a single-shot `(f_old * w + feat) / (w+1)` on
+                # N voxels allocates ≈ 3·N·D·4 bytes of intermediates, which
+                # blows past VRAM on a 4 cm SAM-dense frame (N ≈ 500 k,
+                # D = 512 → 3 GiB). Slicing into CHUNK-sized rows caps that
+                # peak at a fixed ≈ 200 MiB budget without changing the result.
                 fslot_long = old_fslots.long()
-                f_old_pool = self._feat_pool[fslot_long]
-                f_merged = (f_old_pool * w_sel.unsqueeze(-1) + feat_sample) / (
-                    w_sel + 1.0
-                ).unsqueeze(-1)
-                self._feat_pool.index_copy_(0, fslot_long, f_merged)
+                N = int(fslot_long.numel())
+                CHUNK = 32_768
+                for s in range(0, N, CHUNK):
+                    e = min(s + CHUNK, N)
+                    fl = fslot_long[s:e]
+                    w_c = w_sel[s:e].unsqueeze(-1)
+                    f_old_c = self._feat_pool[fl]
+                    f_merged = (f_old_c * w_c + feat_sample[s:e]) / (w_c + 1.0)
+                    self._feat_pool.index_copy_(0, fl, f_merged)
 
     # ------------------------------------------------------------ densify
     @torch.no_grad()
