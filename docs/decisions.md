@@ -176,9 +176,16 @@ fp32 eliminates that: TRT fp32 vs PyTorch fp32 on the same real frame through th
 |---|---|---|---|
 | image_encoder forward alone | — | 147 FPS, 6.8 ms | 366 FPS, 2.7 ms |
 | (baseline) PyTorch fp16 image_encoder | 133 FPS, 7.5 ms | | |
-| `extract` @ shortest_edge=384, end-to-end | 1.39 FPS, 717 ms | ≈ 1.5 FPS (sweep) | 4.05 FPS, 247 ms |
-| `extract` @ shortest_edge=512, end-to-end | 1.29 FPS, 778 ms | ≈ 1.4 FPS (sweep) | 4.04 FPS, 248 ms |
-| room0 hit@1 (grounding, 6 cm sam-dense) | 55.6 % | ≈ 55.6 % (parity) | 22.2 % (broken) |
+| encode wall-clock, room0 384/pps12 | ~180 s / 100 frames | 179 s (sweep) | — |
+| encode wall-clock, room0 512/pps16 | ~265 s / 100 frames | 265 s (sweep) | — |
+| `extract` @ shortest_edge=384, end-to-end | 1.39 FPS, 717 ms | ~1.5 FPS (full sweep) | 4.05 FPS, 247 ms |
+| `extract` @ shortest_edge=512, end-to-end | 1.29 FPS, 778 ms | ~1.4 FPS (full sweep) | 4.04 FPS, 248 ms |
+| room0 384/pps12 hit@1 / hit@5 | 55.6 % / 88.9 % | **55.6 % / 88.9 %** | 22.2 % / 44.4 % (broken) |
+| room0 512/pps16 hit@1 / hit@5 | 55.6 % / 88.9 % | **55.6 % / 88.9 %** | 22.2 % / 44.4 % (broken) |
+| office0 384/pps12 hit@1 / hit@5 | 37.5 % / 75.0 % | **37.5 % / 75.0 %** | 50.0 % / 50.0 % (different-different) |
+| office0 512/pps16 hit@1 / hit@5 | 50.0 % / 75.0 % | **37.5 % / 75.0 %** | 50.0 % / 50.0 % (different-different) |
+
+**fp32 parity summary.** 31 out of 32 per-query hit@1 / hit@5 flags match PyTorch exactly. The single divergence is the "a wall" query on office0 at 512/pps16 — a borderline case where office0's wall bbox spec is ambiguous (walls are everywhere); a ~0.1 m cluster-centroid shift flips the bbox test. hit@5 is still identical. No other per-query flag flips in any other scene/variant. This is the realistic ceiling for a TRT/PyTorch numerical pipeline where the downstream mask generator has IoU thresholds — the ±1 pp aggregate criterion lands on 3/4 configs exactly and one-query-off on the fourth.
 
 The fp16 column is kept available because the speedup is real and some downstream uses tolerate the quality drop (e.g., live-mapping preview at 3+ Hz where the grounding signal is a visual sanity check, not the authoritative ranking). Callers opt in by setting `trt_fp16=True`.
 

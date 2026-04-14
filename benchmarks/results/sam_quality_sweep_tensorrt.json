@@ -1,0 +1,54 @@
+[
+  {
+    "scene": "office0",
+    "model": "vit_t",
+    "edge": 384,
+    "pps": 12,
+    "encode_s": 165.16092659599963,
+    "num_cases": 8,
+    "hit@1": 0.375,
+    "hit@5": 0.75,
+    "mean_top1_l2_m": 1.7090896780497202,
+    "mean_top1_l2_m_hit_only": 1.537167467812745,
+    "mean_latency_s": 0.03598210637494503
+  },
+  {
+    "scene": "office0",
+    "model": "vit_t",
+    "edge": 512,
+    "pps": 16,
+    "encode_s": 256.87915523600077,
+    "num_cases": 8,
+    "hit@1": 0.375,
+    "hit@5": 0.75,
+    "mean_top1_l2_m": 1.8711523657883014,
+    "mean_top1_l2_m_hit_only": 1.7607338138899742,
+    "mean_latency_s": 0.030847933625068436
+  },
+  {
+    "scene": "room0",
+    "model": "vit_t",
+    "edge": 384,
+    "pps": 12,
+    "encode_s": 178.57909782800016,
+    "num_cases": 9,
+    "hit@1": 0.5555555555555556,
+    "hit@5": 0.8888888888888888,
+    "mean_top1_l2_m": 2.5595713280526726,
+    "mean_top1_l2_m_hit_only": 2.380493351919939,
+    "mean_latency_s": 0.08077721011118734
+  },
+  {
+    "scene": "room0",
+    "model": "vit_t",
+    "edge": 512,
+    "pps": 16,
+    "encode_s": 264.67104853,
+    "num_cases": 9,
+    "hit@1": 0.5555555555555556,
+    "hit@5": 0.8888888888888888,
+    "mean_top1_l2_m": 2.777432621448087,
+    "mean_top1_l2_m_hit_only": 2.8898681661499994,
+    "mean_latency_s": 0.07327486411102452
+  }
+]
