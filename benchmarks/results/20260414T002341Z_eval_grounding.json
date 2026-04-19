@@ -1,0 +1,105 @@
+{
+  "timestamp": "2026-04-14T00:23:41+00:00",
+  "map": "outputs/p1_verify/room0_4cm_block_hash_sam.npz",
+  "spec": "eval/specs/replica_room0.yaml",
+  "summary": {
+    "num_cases": 9,
+    "hit@1": 0.5555555555555556,
+    "hit@5": 0.7777777777777778,
+    "mean_top1_l2_m": 2.7592855044658466,
+    "mean_top1_l2_m_hit_only": 2.7359671631030342,
+    "mean_latency_s": 0.41562383622219085
+  },
+  "per_case": [
+    {
+      "query": "the floor",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 2.0566599179079383,
+      "top1_score": 0.19157415628433228,
+      "latency_s": 0.33402606999970885,
+      "num_results": 5
+    },
+    {
+      "query": "the ceiling",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 1.9591453048188383,
+      "top1_score": -3333.1689453125,
+      "latency_s": 0.2239105170001494,
+      "num_results": 5
+    },
+    {
+      "query": "a sofa",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 1.5765864827701497,
+      "top1_score": 0.2049596756696701,
+      "latency_s": 0.4563410709997697,
+      "num_results": 5
+    },
+    {
+      "query": "a bed",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 4.105212915701234,
+      "top1_score": 0.1928296834230423,
+      "latency_s": 0.5209474289999889,
+      "num_results": 5
+    },
+    {
+      "query": "a table",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 5,
+      "top1_centroid_l2_m": 2.0316065342615,
+      "top1_score": -370.20416259765625,
+      "latency_s": 0.3877398279996669,
+      "num_results": 5
+    },
+    {
+      "query": "a chair",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 1.079882900003,
+      "top1_score": 0.19797232747077942,
+      "latency_s": 0.7249091799999405,
+      "num_results": 5
+    },
+    {
+      "query": "a bookshelf",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 5,
+      "top1_centroid_l2_m": 5.423147129854705,
+      "top1_score": 0.18136583268642426,
+      "latency_s": 0.4930129070003204,
+      "num_results": 5
+    },
+    {
+      "query": "a window",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 2.8756303644233983,
+      "top1_score": 0.23144367337226868,
+      "latency_s": 0.3317041430000245,
+      "num_results": 5
+    },
+    {
+      "query": "a tv",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 3.725697990451859,
+      "top1_score": 0.23893213272094727,
+      "latency_s": 0.2680233810001482,
+      "num_results": 5
+    }
+  ]
+}

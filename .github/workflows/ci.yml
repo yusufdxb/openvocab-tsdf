@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cpu:
+    name: cpu lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      # `--extra dev` pulls pytest / ruff / black; the default install pulls
+      # torch CPU wheels, which is enough for the `not gpu` test slice.
+      - name: Sync env
+        run: uv sync --extra dev
+
+      - name: ruff
+        run: uv run ruff check src tests ros2_ws/src/openvocab_tsdf_node/openvocab_tsdf_node eval
+
+      - name: black --check
+        run: uv run black --check src tests ros2_ws/src/openvocab_tsdf_node/openvocab_tsdf_node eval
+
+      - name: pytest (no slow / gpu / dataset / benchmark)
+        run: uv run pytest -m 'not slow and not gpu and not dataset and not benchmark'

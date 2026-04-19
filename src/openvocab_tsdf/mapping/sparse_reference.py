@@ -107,6 +107,9 @@ class SparseFeatureTSDFConfig:
     feature_dim: int = 512
     initial_feat_capacity: int = 65_536  # ~128 MB at 512 fp32
     max_feat_capacity: int = 4_000_000  # cap the pool even in pathological scenes
+    # Normalized-TSDF gate for feature accumulation. See `ReferenceTSDFConfig.
+    # near_surface_band` for the full rationale; same default and meaning here.
+    near_surface_band: float = 0.5
     device: str = "cuda:0"
     # Kernel backend for the feature-pool update. 'pytorch' uses
     # `index_copy_` + vectorized math (always available). 'triton' fuses
@@ -274,8 +277,11 @@ class SparseFeatureTSDF:
         if feature.shape != (cfg.feature_dim,):
             raise ValueError(f"feature must be ({cfg.feature_dim},), got {tuple(feature.shape)}")
 
-        # near-surface gate — same rationale as dense reference
-        near = tsdf_new.abs() <= 1.0
+        # near-surface gate — same rationale as dense reference. `tsdf_new` is
+        # clamped to [-1, 1], so a band of 1.0 would never exclude anything;
+        # the default 0.5 keeps features off free-space voxels in front of the
+        # surface.
+        near = tsdf_new.abs() <= cfg.near_surface_band
         feat_mask = near[idx]
         sel = feat_mask.nonzero(as_tuple=False).squeeze(-1)
         if sel.numel() == 0:

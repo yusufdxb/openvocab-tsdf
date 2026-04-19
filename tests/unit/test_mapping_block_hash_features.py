@@ -232,11 +232,14 @@ def test_block_hash_save_load_round_trip(tmp_path: Path) -> None:
     assert torch.allclose(w_loaded, w_mem)
     assert torch.allclose(t_loaded, t_mem)
 
-    # 3. per-query score reconstruction matches in-memory feature contraction
-    # on every observed voxel.
+    # 3. per-query score reconstruction matches in-memory feature contraction.
+    # Compare on voxels that ACTUALLY received a feature (i.e. inside the
+    # post-fix near-surface band). Far-band observed voxels diverge by
+    # construction: scatter_feat_pool_values fills them with the unobserved
+    # sentinel (-1e4), while the manual densification leaves them at 0.
+    # Both filter out at the threshold step downstream.
     feat_voxel_slot = torch.from_numpy(data["feat_voxel_slot"]).to(device)
     feat_pool = torch.from_numpy(data["feat_pool"]).to(device)
-    observed = w_loaded > 0
 
     # build the in-memory dense feat view via the same scheme used by the
     # existing parity test above
@@ -261,6 +264,7 @@ def test_block_hash_save_load_round_trip(tmp_path: Path) -> None:
                 if ii < Nx and jj < Ny and kk < Nz:
                     feat_dense_mem[ii, jj, kk] = flat_vals[a]
 
+    has_feat_mem = feat_dense_mem.abs().sum(dim=-1) > 0
     for basis in range(D):
         q = torch.zeros(D, device=device)
         q[basis] = 1.0
@@ -269,5 +273,5 @@ def test_block_hash_save_load_round_trip(tmp_path: Path) -> None:
             block_slot, feat_voxel_slot, pool_scores, dims, default=-1e4
         )
         scores_mem = feat_dense_mem @ q
-        diff = (scores_loaded[observed] - scores_mem[observed]).abs().max().item()
+        diff = (scores_loaded[has_feat_mem] - scores_mem[has_feat_mem]).abs().max().item()
         assert diff < 1e-5, f"basis {basis}: max diff {diff}"

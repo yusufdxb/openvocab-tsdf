@@ -38,13 +38,22 @@ def test_patch_feature_accumulates_when_projected_inside_crop():
     for f in frames:
         vol.integrate(f, feature_map=fm, feature_map_input_size=224, feature_map_patch_size=16)
 
-    # every accumulated voxel should have channel-0 == 1 and other channels == 0
+    # Every voxel that received a feature should have all of its mass on
+    # channel 0 (the one set in the feature map) and zero on every other
+    # channel. The exact channel-0 value can be < 1.0 because the running
+    # weighted mean divides by the geometry weight, which may have been
+    # incremented on earlier frames where the voxel was outside the
+    # center-cropped patch grid OR (post-fix gate) outside the near-surface
+    # band — in those frames geometry was integrated but no feature was
+    # written. The invariant the test guards is "the right channel got the
+    # signal, nothing else did."
     flat = vol.feat.view(-1, D)
-    observed = vol.weight.view(-1) > 0
-    if observed.any():
-        obs = flat[observed]
-        assert torch.allclose(obs[:, 0], torch.ones_like(obs[:, 0]), atol=1e-5)
-        assert obs[:, 1:].abs().max().item() < 1e-5
+    has_feat = flat.abs().sum(dim=-1) > 0
+    if has_feat.any():
+        obs = flat[has_feat]
+        assert (obs[:, 0] > 0).all(), "channel-0 should be strictly positive on every fed voxel"
+        assert (obs[:, 0] <= 1.0 + 1e-5).all(), "channel-0 should never exceed the source value"
+        assert obs[:, 1:].abs().max().item() < 1e-5, "non-target channels must stay zero"
 
 
 @pytest.mark.gpu

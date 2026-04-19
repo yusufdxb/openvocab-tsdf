@@ -53,21 +53,24 @@ openvocab-tsdf is an offline-first GPU pipeline that turns RGB-D plus poses into
 ## Components
 
 ### 1. Data ingestion (`src/openvocab_tsdf/data/`)
-Dataset-agnostic loader producing a typed `RGBDFrame` stream: `(color: u8[H,W,3], depth_m: f32[H,W], K: f32[3,3], T_wc: f32[4,4], timestamp: f64)`. Initial drivers: Replica, ScanNet v2, TUM RGB-D. All drivers lazy-load and stream to avoid pinning full sequences in host RAM.
+Dataset-agnostic loader producing a typed `RGBDFrame` stream: `(color: u8[H,W,3], depth_m: f32[H,W], K: f32[3,3], T_wc: f32[4,4], timestamp: f64)`. Implemented today: Replica, the NICE-SLAM demo scene, and a synthetic ray-traced scene generator for tests. ScanNet v2 and TUM RGB-D drivers were originally listed here as v1 targets but are explicit follow-ups (see `CLAUDE_CODE_NEXT.md`). All implemented drivers lazy-load and stream to avoid pinning full sequences in host RAM.
 
 ### 2. TSDF fusion core (`src/openvocab_tsdf/mapping/`)
-GPU-resident voxel structure. Two-stage implementation:
-1. **Reference impl** (`mapping/reference.py`) — PyTorch scatter-based dense TSDF. Slow but simple, correctness ground truth. Tests and CUDA kernels must agree with this within tolerance.
-2. **Hot-path impl** (`mapping/cuda/`) — custom CUDA kernels with sparse voxel hashing. Targets >30 FPS at 640×480. Open addressing hash, Morton-ordered blocks for coalesced access.
+GPU-resident voxel structure. Implemented backends:
+1. **Reference** (`mapping/reference.py`) — PyTorch dense TSDF. Slow but simple, correctness ground truth. All other backends are parity-tested against it.
+2. **Triton** (`mapping/triton_backend.py`) — sm_120-compatible Triton geometry kernel; geometry only (no per-voxel features yet).
+3. **SparseFeatureTSDF** (`mapping/sparse_reference.py`) — dense geometry + lazy per-voxel feature pool; ~3× feature-memory reduction at room scale.
+4. **BlockHashTSDF** (`mapping/block_hash.py`) — block-hash sparse *geometry* with optional per-voxel sparse features composed on top; frustum-culled integrate.
 
-Both implementations satisfy the same `TSDFVolume` interface: `integrate(frame) -> None`, `extract_mesh() -> TriangleMesh`, `query_voxels(points_w) -> (tsdf, weight, color, feat)`.
+A native CUDA backend was originally planned and is logged in `decisions.md` as deferred — Triton fills that role today and is the documented "fast kernel" path. All backends satisfy the same `TSDFVolume` interface: `integrate(frame) -> None`, `extract_mesh() -> Mesh`, `query(points_w) -> VoxelQueryResult(tsdf, weight, color, feat)`.
 
 ### 3. Open-vocab semantics (`src/openvocab_tsdf/semantics/`)
-OpenCLIP encoder running in fp16 on GPU. Two feature modes:
-- **Global** — one ViT-B/16 embedding per frame (fast, coarse). Baseline for v1.
-- **Patch/Region** — ViT patch tokens or SAM mask crops, embedded per region. Enables finer 3D grounding. Gated behind a config flag, evaluated as Phase 2b.
+OpenCLIP encoder running in fp16 on GPU. Three feature modes are implemented:
+- **`global`** — one ViT-B/16 embedding per frame (fast, coarse). Baseline.
+- **`patch`** — ViT patch tokens lifted into 3D via the MaskCLIP last-block-attention bypass plus per-voxel patch lookup through the encoder's preprocess mapping. `reference` backend only.
+- **`sam_dense`** — MobileSAM auto-masks → CLIP per-mask crops → per-pixel dense feature map (with mask-IoU blending and a frame-global fallback for pixels outside every mask). `reference` and `block_hash` backends.
 
-Features are pooled into voxels during fusion via a weighted running mean, weighted by depth confidence and inverse observation age.
+Features are pooled into voxels during fusion via a weighted running mean. The per-frame contribution is restricted to voxels whose normalized TSDF is within `near_surface_band` (default 0.5) so free-space voxels in front of a surface do not "steal" the features of whatever the ray eventually hits.
 
 ### 4. Query engine (`src/openvocab_tsdf/grounding/`)
 Text → OpenCLIP text encoder → query vector `q`. Score all active voxels by cos-sim against per-voxel feature mean. Spatial post-processing: threshold, connected-component clustering in voxel space, rank clusters by score×size. Return top-K with centroid, bounding box, confidence, and supporting evidence (best observing frames).
@@ -75,12 +78,10 @@ Text → OpenCLIP text encoder → query vector `q`. Score all active voxels by 
 ### 5. Visualization (`src/openvocab_tsdf/viz/`)
 Open3D-based viewer for meshes, voxels, and query heatmaps. Used in tests, notebooks, and the demo app. Not a runtime dependency of the core pipeline.
 
-### 6. ROS 2 interface (`src/openvocab_tsdf/ros2/` + future `ros2_ws/`)
-Phase 5 only. Single node with:
-- Subscriber: synchronized `image`, `camera_info`, `tf` (or pre-computed pose topic)
-- Service: `/semantic/ground` — text → ranked 3D targets
-- Topic: `/semantic/voxel_map` — periodic map publication for debug
-- Parameter: `mode ∈ {offline, bag, live}`
+### 6. ROS 2 interface (`ros2_ws/`)
+Single node `openvocab_tsdf_node` (with `openvocab_tsdf_msgs` for the service type). Two modes selected via the `live_mode` parameter:
+- **offline** (default) — loads a saved feature map (`dense`, `voxel_slot`, or `block_hash` `sparse_kind`) through the shared `grounding.map_bundle.MapBundle` loader and serves `/openvocab/ground`.
+- **live** — synchronizes color + depth + camera_info + TF, runs CLIP encode + `ReferenceTSDF.integrate` per frame, and publishes a CUBE_LIST RViz preview.
 
 ## Technology Choices
 

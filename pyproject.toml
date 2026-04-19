@@ -103,3 +103,17 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
+
+# Pin torch / torchvision to the cu128 build by default. Rationale:
+# the project targets RTX 5070 / sm_120 (Blackwell). The PyPI default
+# `torch==2.11.0+cu130` requires NVIDIA driver >=580; the cu128 wheel
+# works on driver >=525, which covers the 570.x line that ships with
+# stock Ubuntu LTS HWE kernels. README.md documents the trade-off.
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

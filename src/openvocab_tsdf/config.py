@@ -14,7 +14,10 @@ from pydantic import BaseModel, Field
 
 
 class DatasetConfig(BaseModel):
-    name: Literal["replica", "nice_slam_demo", "scannet", "tum", "custom"] = "replica"
+    # Only loaders that exist in `data/` are listed here. ScanNet / TUM /
+    # custom datasets are explicit follow-ups (see CLAUDE_CODE_NEXT.md);
+    # exposing them in the literal would falsely advertise support.
+    name: Literal["replica", "nice_slam_demo"] = "replica"
     root: Path
     scene: str
     max_frames: int | None = None
@@ -31,7 +34,10 @@ class MappingConfig(BaseModel):
     truncation_distance_m: float = 0.1
     hash_capacity: int = 1 << 20
     block_size: int = 8
-    backend: Literal["reference", "sparse_feature", "block_hash", "triton", "cuda"] = "reference"
+    # `cuda` is intentionally not listed: there is no hand-written CUDA
+    # backend (Triton fills that role — see decisions.md). The only mapping
+    # backends that actually exist in `mapping/` are listed below.
+    backend: Literal["reference", "sparse_feature", "block_hash", "triton"] = "reference"
     # sparse-feature backend only
     feat_update_backend: Literal["pytorch", "triton"] = "triton"
     initial_feat_capacity: int = 65_536
@@ -46,12 +52,20 @@ class MappingConfig(BaseModel):
     bounds_max: tuple[float, float, float] | None = None
     auto_bounds_radius_m: float = 4.0
     max_weight: float = 32.0
+    # Normalized-TSDF band for the per-frame feature gate. Features are only
+    # written to voxels whose `|sdf / truncation_distance| <= near_surface_band`
+    # for that frame. Default 0.5 keeps free-space voxels in front of a surface
+    # from stealing the surface's features. Setting this to 1.0 disables the
+    # gate (matches the pre-fix legacy behavior, retained as an escape hatch).
+    near_surface_band: float = 0.5
 
 
 class SemanticsConfig(BaseModel):
     model: str = "ViT-B-16"
     pretrained: str = "laion2b_s34b_b88k"
-    mode: Literal["global", "patch", "mask", "sam_dense"] = "global"
+    # `mask` is not implemented; the only dense path that exists is
+    # `sam_dense` (mask-features pipeline via MobileSAM + per-mask CLIP).
+    mode: Literal["global", "patch", "sam_dense"] = "global"
     batch_size: int = 16
     device: str = "cuda:0"
     dtype: Literal["fp16", "fp32"] = "fp16"

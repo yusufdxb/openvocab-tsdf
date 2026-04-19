@@ -1,0 +1,69 @@
+{
+  "name": "sam_encode",
+  "timestamp": "2026-04-14T00:26:31+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "images": 8,
+    "warmup": 1,
+    "repeats": 3,
+    "encoder": false,
+    "e2e_shortest_edges": [
+      384,
+      512
+    ]
+  },
+  "runs": [
+    {
+      "backend": "extract_pytorch_se384",
+      "times_s": [
+        2.914137988999755,
+        2.8354518300002383,
+        2.855216548000044
+      ],
+      "fps_mean": 1.3945694404026032,
+      "fps_min": 1.3726185977119616,
+      "fps_max": 1.4107099114428137,
+      "ms_per_frame_mean": 717.0671972500031
+    },
+    {
+      "backend": "extract_tensorrt_se384",
+      "times_s": [
+        0.9927591499999835,
+        0.9850142340001184,
+        0.9856063129996073
+      ],
+      "fps_mean": 4.049430456768489,
+      "fps_min": 4.029174649259154,
+      "fps_max": 4.060855023136162,
+      "ms_per_frame_mean": 246.94830808330912
+    },
+    {
+      "backend": "extract_pytorch_se512",
+      "times_s": [
+        3.10473108899987,
+        3.100439321000067,
+        3.1310114670000075
+      ],
+      "fps_mean": 1.2853220040156326,
+      "fps_min": 1.2775424306678178,
+      "fps_max": 1.290139746618158,
+      "ms_per_frame_mean": 778.0151564166621
+    },
+    {
+      "backend": "extract_tensorrt_se512",
+      "times_s": [
+        0.9862989700000071,
+        0.9970070790000136,
+        0.9883635560004222
+      ],
+      "fps_mean": 4.038133976875337,
+      "fps_min": 4.012007621863581,
+      "fps_max": 4.055565423534784,
+      "ms_per_frame_mean": 247.6391337500369
+    }
+  ]
+}

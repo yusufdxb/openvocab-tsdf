@@ -1,0 +1,53 @@
+{
+  "name": "sam_encode",
+  "timestamp": "2026-04-14T00:24:49+00:00",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5070",
+    "vram_gb": 11.48,
+    "host": "mewtwo"
+  },
+  "params": {
+    "images": 8,
+    "warmup": 1,
+    "repeats": 3,
+    "encoder": false,
+    "e2e_shortest_edges": [
+      384,
+      512
+    ]
+  },
+  "runs": [
+    {
+      "backend": "extract_pytorch_se384",
+      "times_s": [
+        2.935429247999764,
+        2.9949323149999145,
+        2.9794228949999706
+      ],
+      "fps_mean": 1.3468339280896746,
+      "fps_min": 1.3355894488721072,
+      "fps_max": 1.3626627188257552,
+      "ms_per_frame_mean": 742.4820381666374
+    },
+    {
+      "backend": "extract_tensorrt_se384",
+      "error": "TypeError(\"cannot assign 'openvocab_tsdf.semantics.trt_sam.TensorRTSamEncoder' as child module 'image_encoder' (torch.nn.Module or None expected)\")"
+    },
+    {
+      "backend": "extract_pytorch_se512",
+      "times_s": [
+        3.251372229000026,
+        3.285069609999937,
+        3.2409856299996136
+      ],
+      "fps_mean": 1.2273166983899741,
+      "fps_min": 1.2176302102773637,
+      "fps_max": 1.2341924515106464,
+      "ms_per_frame_mean": 814.7856224166313
+    },
+    {
+      "backend": "extract_tensorrt_se512",
+      "error": "TypeError(\"cannot assign 'openvocab_tsdf.semantics.trt_sam.TensorRTSamEncoder' as child module 'image_encoder' (torch.nn.Module or None expected)\")"
+    }
+  ]
+}

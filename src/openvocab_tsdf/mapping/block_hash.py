@@ -157,6 +157,9 @@ class BlockHashTSDFConfig:
     feature_dim: int = 0
     initial_feat_capacity: int = 65_536
     max_feat_capacity: int = 8_000_000
+    # Normalized-TSDF gate for feature accumulation. See `ReferenceTSDFConfig.
+    # near_surface_band` for the full rationale; same default and meaning here.
+    near_surface_band: float = 0.5
     device: str = "cuda:0"
 
 
@@ -475,8 +478,10 @@ class BlockHashTSDF:
 
         # Per-voxel feature update (optional). Gate to near-surface voxels so
         # free-space voxels in front of a surface don't steal features.
+        # `t_samp` is clamped to [-1, 1] above, so the band must be < 1.0 to
+        # actually exclude anything (see `BlockHashTSDFConfig.near_surface_band`).
         if self._store_features and (feature is not None or dense_feature_map is not None):
-            near = t_samp.abs() <= 1.0
+            near = t_samp.abs() <= cfg.near_surface_band
             sel = near.nonzero(as_tuple=False).squeeze(-1)
             if sel.numel() > 0:
                 vs_sel = voxel_slot[sel]

@@ -28,6 +28,11 @@ venv/
 *.so
 third_party/build/
 
+# ROS 2 colcon generated artifacts (only sources under ros2_ws/src/ are code)
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
 # Editors
 .vscode/
 .idea/

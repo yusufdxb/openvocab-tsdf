@@ -198,3 +198,68 @@ The fp16 column is kept available because the speedup is real and some downstrea
 **Reversal triggers.** (1) Rewriting MobileSAM's layernorm / GELU to opset-17 `INormalizationLayer` / `Gelu` recovers fp16 parity on real images — if someone proves that, fp16 can become the default. (2) Someone builds a mask-free single-pass dense encoder (e.g., MaskCLIP + LSeg) where fp16 perturbations don't change auto-mask boundaries — then fp16 + TRT is lossless by construction. (3) TRT engine builds become a portability burden across sm targets.
 
 ---
+
+## 2026-04-16 — Near-surface feature gate: configurable band, not the tautological `<= 1.0`
+
+**Decision.** All three feature-storing TSDF backends (`ReferenceTSDF`,
+`SparseFeatureTSDF`, `BlockHashTSDF`) gate per-frame feature accumulation
+with `tsdf_new.abs() <= cfg.near_surface_band`, where `near_surface_band`
+defaults to 0.5 (i.e., features only land on voxels within half the
+truncation distance of the surface). The field is plumbed through
+`MappingConfig` so users can tune it per-scene.
+
+**Bug.** The pre-fix code clamped `tsdf_new` to `[-1, 1]` and then gated
+on `tsdf_new.abs() <= 1.0`. That comparison is vacuously true for every
+surviving voxel, so the gate was a no-op: features were written across
+the entire truncation band, including free-space voxels in front of the
+surface. Those voxels then "stole" the features of whatever the ray
+eventually hit, which is exactly the failure mode the gate was supposed
+to prevent.
+
+**Why 0.5 by default.** Symmetric with the surface-only filter on the
+query side (`rank_query`'s `surface_tsdf_abs_max=0.5`) — features are
+written and queried on the same shell. Setting `near_surface_band=1.0`
+restores the broken legacy behavior as an escape hatch.
+
+**Verification.** `tests/unit/test_mapping_near_surface_gate.py`
+parametrizes each backend across `band ∈ {0.5, 1.0}` on a one-frame
+synthetic scene where the truncation half-band is wide enough to be
+interesting. The 0.5 case asserts no observed voxel with
+`|tsdf| > 0.5` carries a feature; the 1.0 case asserts at least one
+does (the regression check that the gate is what made the difference,
+not some other code change). All three backends pass on CPU.
+
+**Reversal triggers.** None expected. If a downstream task wants
+features on near-free-space voxels (e.g., for a free-space classifier),
+that consumer should either bump `near_surface_band` or write features
+at a different stage of the pipeline; do not re-introduce the
+tautological gate.
+
+---
+
+## 2026-04-16 — `MapBundle`: shared loader for the three saved-map layouts
+
+**Decision.** A new module `grounding/map_bundle.py` exposes `MapBundle`,
+which loads any of the three saved-map layouts (`dense`, `voxel_slot`,
+`block_hash`) and presents a uniform `score_query(q, neg=None)` →
+`(Nx, Ny, Nz)` API.
+
+**Bug it fixes.** The ROS 2 grounding node previously read `data["feat"]`
+unconditionally in offline mode, which exists only on `dense` maps. Loading
+a sparse map (the only layout that fits a real warehouse-scale scene)
+crashed at the `KeyError: feat` point. The node now goes through
+`MapBundle` and serves all three layouts.
+
+**Scope.** `pipeline.ground_text`, `eval/eval_grounding.py`, and
+`viz/heatmap.py` still have their own per-`sparse_kind` dispatch. They
+work; refactoring them onto `MapBundle` is mechanical follow-up.
+
+**Memory note in code.** `MapBundle.score_query` materialises a dense
+`(Nx, Ny, Nz)` fp32 tensor on every call, and for `block_hash` maps it
+also keeps the densified `tsdf` and `weight` volumes in VRAM. At room
+scale this is fine; warehouse scale will hit the same load-side
+densification ceiling documented in
+`mapping/block_hash.densify_block_pool` — addressed in a separate
+follow-up.
+
+---

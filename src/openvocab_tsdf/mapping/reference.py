@@ -32,6 +32,13 @@ class ReferenceTSDFConfig:
     store_color: bool = True
     store_features: bool = False
     feature_dim: int = 0
+    # Normalized-TSDF gate for feature accumulation. A voxel only receives a
+    # feature on a frame where its per-frame `|sdf / truncation| <= band`.
+    # 1.0 reproduces the old (broken) "always pass" behavior since `tsdf_new`
+    # is clamped to [-1, 1]; 0.5 means features only land within half the
+    # truncation distance of the surface, which is what excludes free-space
+    # voxels in front of the surface from stealing whatever the ray hits.
+    near_surface_band: float = 0.5
     device: str = "cuda:0"
 
 
@@ -178,8 +185,10 @@ class ReferenceTSDF:
 
         # features are only credible on voxels near the integrated surface;
         # free-space voxels in front of a surface would otherwise steal the
-        # features of whatever the ray eventually hits.
-        near_surface_local = tsdf_new.abs() <= 1.0  # normalized [-1, 1] band
+        # features of whatever the ray eventually hits. `tsdf_new` is already
+        # clamped to [-1, 1], so the band must be < 1.0 to actually exclude
+        # anything — see `near_surface_band` on the config.
+        near_surface_local = tsdf_new.abs() <= cfg.near_surface_band
         # in the surviving-idx space, build a mask
         near_surface_at_idx = near_surface_local[idx]
 

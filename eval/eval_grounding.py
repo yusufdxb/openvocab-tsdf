@@ -31,6 +31,7 @@ import numpy as np
 import torch
 import yaml
 
+from openvocab_tsdf.grounding.map_bundle import MapBundle
 from openvocab_tsdf.grounding.query import rank_query
 from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
@@ -51,54 +52,19 @@ def _in_bbox(
 
 def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
     spec = _load_spec(spec_path)
-    data = np.load(map_path, allow_pickle=True)
-
     device = spec.get("device", "cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = spec.get("dtype", "fp16" if torch.cuda.is_available() else "fp32")
 
-    origin = data["origin"]
-    voxel_size = float(data["voxel_size"])
-    sparse_kind = (
-        str(data["sparse_kind"])
-        if "sparse_kind" in data.files
-        else ("voxel_slot" if ("sparse" in data.files and bool(data["sparse"])) else "dense")
-    )
-    is_sparse = sparse_kind != "dense"
-
-    block_slot = None
-    feat_voxel_slot = None
-    feat_pool_bh = None
-    slot = None
-    pool = None
-    feat = None
-    if sparse_kind == "block_hash":
-        from openvocab_tsdf.mapping.block_hash import densify_block_pool
-
-        dims = tuple(int(d) for d in data["dims"])
-        block_dims = tuple(int(d) for d in data["block_dims"])
-        block_slot = torch.from_numpy(data["block_slot"]).to(device)
-        tsdf_pool = torch.from_numpy(data["tsdf_pool"]).to(device)
-        weight_pool_t = torch.from_numpy(data["weight_pool"]).to(device)
-        weight = densify_block_pool(block_slot, weight_pool_t, dims, block_dims, default=0.0)
-        # Keep tsdf_dense around too (currently unused by rank_query through
-        # precomputed_scores, but saves a round-trip if we need it later).
-        _ = densify_block_pool(block_slot, tsdf_pool, dims, block_dims, default=1.0)
-        feat_voxel_slot = torch.from_numpy(data["feat_voxel_slot"]).to(device)
-        feat_pool_bh = torch.from_numpy(data["feat_pool"]).to(device)
-    elif sparse_kind == "voxel_slot":
-        weight = torch.from_numpy(data["weight"]).to(device)
-        dims = tuple(int(d) for d in data["dims"])
-        slot = torch.from_numpy(data["voxel_slot"]).to(device)
-        pool = torch.from_numpy(data["feat_pool"]).to(device)
-    else:
-        weight = torch.from_numpy(data["weight"]).to(device)
-        feat = torch.from_numpy(data["feat"]).to(device)
-        dims = tuple(feat.shape[:3])
+    # All three on-disk layouts go through MapBundle. The bundle materialises a
+    # dense (Nx,Ny,Nz) score tensor per query without ever building the 4-D
+    # feature volume — for voxel_slot/block_hash it scores the pool first then
+    # scatters; for dense it does the standard `feat @ q` reshape.
+    bundle = MapBundle(map_path, device=device)
 
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(
-            model=spec.get("model", str(data["model"])),
-            pretrained=spec.get("pretrained", str(data["pretrained"])),
+            model=spec.get("model", bundle.meta.model),
+            pretrained=spec.get("pretrained", bundle.meta.pretrained),
             device=device,
             dtype=dtype,
         )
@@ -120,59 +86,25 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
         else:
             q = encoder.encode_texts([q_text])[0]
             neg_e = None
-        if is_sparse:
-            if sparse_kind == "block_hash":
-                from openvocab_tsdf.mapping.block_hash import scatter_feat_pool_values
-
-                pool_scores = feat_pool_bh @ q
-                if neg_e is not None:
-                    pool_scores = pool_scores - feat_pool_bh @ neg_e
-                scores_vol = scatter_feat_pool_values(
-                    block_slot, feat_voxel_slot, pool_scores, dims, default=-1e4
-                )
-            else:
-                # voxel_slot sparse: score only the observed voxels via the pool,
-                # scatter into a dense (Nx,Ny,Nz) scores tensor (22 MB at 5.6M voxels).
-                scores_flat = torch.full(
-                    (dims[0] * dims[1] * dims[2],), -1e4, dtype=torch.float32, device=device
-                )
-                alloc = slot.view(-1) >= 0
-                pool_scores = pool @ q
-                if neg_e is not None:
-                    pool_scores = pool_scores - pool @ neg_e
-                scores_flat[alloc] = pool_scores[slot.view(-1)[alloc].long()]
-                scores_vol = scores_flat.view(*dims)
-            results = rank_query(
-                voxel_feats=None,
-                voxel_weights=weight,
-                text_embedding=None,
-                precomputed_scores=scores_vol,
-                origin=origin,
-                voxel_size=voxel_size,
-                min_weight=float(spec.get("min_weight", 1.0)),
-                score_threshold=spec.get("score_threshold"),
-                top_percentile=spec.get("top_percentile", 0.02),
-                cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
-                min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
-                top_k=int(spec.get("top_k", 5)),
-                scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
-            )
-        else:
-            results = rank_query(
-                voxel_feats=feat,
-                voxel_weights=weight,
-                text_embedding=q,
-                origin=origin,
-                voxel_size=voxel_size,
-                min_weight=float(spec.get("min_weight", 1.0)),
-                score_threshold=spec.get("score_threshold"),
-                top_percentile=spec.get("top_percentile", 0.02),
-                cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
-                min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
-                top_k=int(spec.get("top_k", 5)),
-                scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
-                neg_text_embedding=neg_e,
-            )
+        scores_vol = bundle.score_query(q, neg=neg_e)
+        # Note: `voxel_tsdf` deliberately omitted so `surface_only` is a no-op,
+        # matching the pre-refactor behavior of this script (neither the dense
+        # nor the sparse branch used to pass tsdf in).
+        results = rank_query(
+            voxel_feats=None,
+            voxel_weights=bundle.weight,
+            text_embedding=None,
+            precomputed_scores=scores_vol,
+            origin=bundle.origin,
+            voxel_size=bundle.voxel_size,
+            min_weight=float(spec.get("min_weight", 1.0)),
+            score_threshold=spec.get("score_threshold"),
+            top_percentile=spec.get("top_percentile", 0.02),
+            cluster_eps_vox=int(spec.get("cluster_eps_vox", 2)),
+            min_cluster_voxels=int(spec.get("min_cluster_voxels", 8)),
+            top_k=int(spec.get("top_k", 5)),
+            scene_mean_subtract=bool(spec.get("scene_mean_subtract", False)),
+        )
         latency = time.perf_counter() - t0
 
         slack = float(spec.get("bbox_slack_m", 0.1))

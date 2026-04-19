@@ -77,6 +77,7 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
             store_color=m.store_color,
             store_features=m.store_features,
             feature_dim=m.feature_dim if m.store_features else 0,
+            near_surface_band=m.near_surface_band,
             device=m.device,
         )
         return ReferenceTSDF(ref_cfg)
@@ -113,6 +114,7 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
                 initial_feat_capacity=m.initial_feat_capacity,
                 max_feat_capacity=m.max_feat_capacity,
                 feat_update_backend=m.feat_update_backend,
+                near_surface_band=m.near_surface_band,
                 device=m.device,
             )
         )
@@ -131,6 +133,7 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
                 feature_dim=m.feature_dim if m.store_features else 0,
                 initial_feat_capacity=m.initial_feat_capacity,
                 max_feat_capacity=m.max_feat_capacity,
+                near_surface_band=m.near_surface_band,
                 device=m.device,
             )
         )
@@ -206,6 +209,7 @@ def encode_and_fuse(
                 initial_feat_capacity=m.initial_feat_capacity,
                 max_feat_capacity=m.max_feat_capacity,
                 feat_update_backend=m.feat_update_backend,
+                near_surface_band=m.near_surface_band,
                 device=m.device,
             )
         )
@@ -224,6 +228,7 @@ def encode_and_fuse(
                 feature_dim=m.feature_dim,
                 initial_feat_capacity=m.initial_feat_capacity,
                 max_feat_capacity=m.max_feat_capacity,
+                near_surface_band=m.near_surface_band,
                 device=m.device,
             )
         )
@@ -237,6 +242,7 @@ def encode_and_fuse(
             store_color=m.store_color,
             store_features=True,
             feature_dim=m.feature_dim,
+            near_surface_band=m.near_surface_band,
             device=m.device,
         )
         vol = ReferenceTSDF(ref_cfg)
@@ -398,19 +404,20 @@ def ground_text(
     scene_mean_subtract: bool = False,
     negative_query: str | None = None,
 ) -> list:
-    """Load a saved map, embed a query, return ranked 3D targets."""
+    """Load a saved map, embed a query, return ranked 3D targets.
+
+    All three on-disk layouts (`dense`, `voxel_slot`, `block_hash`) go through
+    `MapBundle`, which materialises a dense `(Nx, Ny, Nz)` score volume per
+    query without ever building the 4-D feature volume. `negative_query` is
+    folded into the bundle's `score_query`, so `rank_query` always sees a
+    precomputed score tensor — its own `neg_text_embedding` knob is
+    unnecessary on this path.
+    """
+    from openvocab_tsdf.grounding.map_bundle import MapBundle
     from openvocab_tsdf.grounding.query import rank_query
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
-    data = np.load(map_path, allow_pickle=True)
-    origin = data["origin"]
-    voxel_size = float(data["voxel_size"])
-    sparse_kind = (
-        str(data["sparse_kind"])
-        if "sparse_kind" in data.files
-        else ("voxel_slot" if ("sparse" in data.files and bool(data["sparse"])) else "dense")
-    )
-
+    bundle = MapBundle(map_path, device=device)
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
     )
@@ -419,70 +426,15 @@ def ground_text(
     q = emb[0]
     neg = emb[1] if negative_query else None
 
-    if sparse_kind == "block_hash":
-        from openvocab_tsdf.mapping.block_hash import (
-            densify_block_pool,
-            scatter_feat_pool_values,
-        )
-
-        dims = tuple(int(d) for d in data["dims"])
-        block_dims = tuple(int(d) for d in data["block_dims"])
-        block_slot = torch.from_numpy(data["block_slot"]).to(device)
-        tsdf_pool = torch.from_numpy(data["tsdf_pool"]).to(device)
-        weight_pool = torch.from_numpy(data["weight_pool"]).to(device)
-        tsdf = densify_block_pool(block_slot, tsdf_pool, dims, block_dims, default=1.0)
-        weight = densify_block_pool(block_slot, weight_pool, dims, block_dims, default=0.0)
-        # Score features via the feat pool and scatter back through the double
-        # indirection into a dense (Nx, Ny, Nz) scores tensor. Avoids ever
-        # materialising the 4-D feature volume.
-        feat_voxel_slot = torch.from_numpy(data["feat_voxel_slot"]).to(device)
-        feat_pool = torch.from_numpy(data["feat_pool"]).to(device)
-        pool_scores = feat_pool @ q
-        if neg is not None:
-            pool_scores = pool_scores - feat_pool @ neg
-        scores_vol = scatter_feat_pool_values(
-            block_slot, feat_voxel_slot, pool_scores, dims, default=-1e4
-        )
-        return rank_query(
-            voxel_feats=None,
-            voxel_weights=weight,
-            voxel_tsdf=tsdf,
-            text_embedding=None,
-            precomputed_scores=scores_vol,
-            origin=origin,
-            voxel_size=voxel_size,
-            min_weight=min_weight,
-            score_threshold=score_threshold,
-            top_percentile=top_percentile,
-            cluster_eps_vox=cluster_eps_vox,
-            min_cluster_voxels=min_cluster_voxels,
-            top_k=top_k,
-            scene_mean_subtract=scene_mean_subtract,
-        )
-
-    # "voxel_slot" (sparse_feature) or "dense" (reference).
-    weight = torch.from_numpy(data["weight"]).to(device)
-    tsdf = torch.from_numpy(data["tsdf"]).to(device) if "tsdf" in data.files else None
-
-    if sparse_kind == "voxel_slot":
-        dims = tuple(int(d) for d in data["dims"])
-        D = int(data["feature_dim"])
-        slot = torch.from_numpy(data["voxel_slot"]).to(device)
-        pool = torch.from_numpy(data["feat_pool"]).to(device)
-        feat = torch.zeros((dims[0] * dims[1] * dims[2], D), dtype=torch.float32, device=device)
-        alloc = slot.view(-1) >= 0
-        feat[alloc] = pool[slot.view(-1)[alloc].long()]
-        feat = feat.view(*dims, D)
-    else:
-        feat = torch.from_numpy(data["feat"]).to(device)
-
+    scores = bundle.score_query(q, neg=neg)
     return rank_query(
-        voxel_feats=feat,
-        voxel_weights=weight,
-        voxel_tsdf=tsdf,
-        text_embedding=q,
-        origin=origin,
-        voxel_size=voxel_size,
+        voxel_feats=None,
+        voxel_weights=bundle.weight,
+        voxel_tsdf=bundle.tsdf,
+        text_embedding=None,
+        precomputed_scores=scores,
+        origin=bundle.origin,
+        voxel_size=bundle.voxel_size,
         min_weight=min_weight,
         score_threshold=score_threshold,
         top_percentile=top_percentile,
@@ -490,7 +442,6 @@ def ground_text(
         min_cluster_voxels=min_cluster_voxels,
         top_k=top_k,
         scene_mean_subtract=scene_mean_subtract,
-        neg_text_embedding=neg,
     )
 
 

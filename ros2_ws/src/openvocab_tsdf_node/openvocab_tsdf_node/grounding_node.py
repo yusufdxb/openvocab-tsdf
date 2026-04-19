@@ -107,18 +107,21 @@ class GroundingNode(Node):
 
     # ----------------------------------------------------------- offline mode
     def _init_offline_mode(self) -> None:
+        from openvocab_tsdf.grounding.map_bundle import MapBundle
+
         map_path = self.get_parameter("map_path").value
         if not map_path or not Path(map_path).is_file():
             raise RuntimeError(f"map_path must point to an existing npz: {map_path!r}")
         self.get_logger().info(f"offline mode: loading map {map_path}")
-        data = np.load(map_path, allow_pickle=True)
-        self.feat = torch.from_numpy(data["feat"]).to(self._device)
-        self.weight = torch.from_numpy(data["weight"]).to(self._device)
-        self.tsdf = (
-            torch.from_numpy(data["tsdf"]).to(self._device) if "tsdf" in data.files else None
-        )
-        self.origin = data["origin"]
-        self.voxel_size = float(data["voxel_size"])
+        # MapBundle dispatches on `sparse_kind`, so dense / voxel_slot / block_hash
+        # maps are all served through the same `score_query` path. Live mode
+        # leaves this attribute unset and exposes a dense `feat` instead.
+        self._bundle = MapBundle(map_path, device=self._device)
+        self.weight = self._bundle.weight
+        self.tsdf = self._bundle.tsdf
+        self.origin = self._bundle.origin
+        self.voxel_size = self._bundle.voxel_size
+        self.get_logger().info(f"loaded {self._bundle.sparse_kind} map: dims={self._bundle.dims}")
 
     # ---------------------------------------------------------------- live mode
     def _init_live_mode(self) -> None:
@@ -148,7 +151,10 @@ class GroundingNode(Node):
                 device=self._device,
             )
         )
-        # mirror the attributes the service uses in offline mode
+        # mirror the attributes the service uses in offline mode. Live mode
+        # always uses the dense reference backend, so we keep `feat` directly
+        # and skip the MapBundle dispatch.
+        self._bundle = None
         self.feat = self._live_vol.feat
         self.weight = self._live_vol.weight
         self.tsdf = self._live_vol.tsdf
@@ -358,20 +364,41 @@ class GroundingNode(Node):
 
         q = self.encoder.encode_texts([req.query])[0]
         with self._map_lock:
-            results = rank_query(
-                voxel_feats=self.feat,
-                voxel_weights=self.weight,
-                voxel_tsdf=self.tsdf,
-                text_embedding=q,
-                origin=self.origin,
-                voxel_size=self.voxel_size,
-                min_weight=1.0,
-                score_threshold=score_threshold,
-                top_percentile=top_percentile,
-                cluster_eps_vox=2,
-                min_cluster_voxels=8,
-                top_k=top_k,
-            )
+            if self._bundle is not None:
+                # offline mode — dispatches on sparse_kind, score volume is
+                # materialized fresh per query
+                scores = self._bundle.score_query(q)
+                results = rank_query(
+                    voxel_feats=None,
+                    voxel_weights=self.weight,
+                    voxel_tsdf=self.tsdf,
+                    text_embedding=None,
+                    precomputed_scores=scores,
+                    origin=self.origin,
+                    voxel_size=self.voxel_size,
+                    min_weight=1.0,
+                    score_threshold=score_threshold,
+                    top_percentile=top_percentile,
+                    cluster_eps_vox=2,
+                    min_cluster_voxels=8,
+                    top_k=top_k,
+                )
+            else:
+                # live mode — dense reference, score on the fly via voxel_feats
+                results = rank_query(
+                    voxel_feats=self.feat,
+                    voxel_weights=self.weight,
+                    voxel_tsdf=self.tsdf,
+                    text_embedding=q,
+                    origin=self.origin,
+                    voxel_size=self.voxel_size,
+                    min_weight=1.0,
+                    score_threshold=score_threshold,
+                    top_percentile=top_percentile,
+                    cluster_eps_vox=2,
+                    min_cluster_voxels=8,
+                    top_k=top_k,
+                )
 
         rsp.header.stamp = self.get_clock().now().to_msg()
         rsp.header.frame_id = self._map_frame

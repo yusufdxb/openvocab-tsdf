@@ -1,1 +1,0 @@
-/home/yusuf/Projects/personal/openvocab-tsdf/ros2_ws/build/openvocab_tsdf_msgs/rosidl_typesupport_fastrtps_c/openvocab_tsdf_msgs/msg/detail/grounding_target__rosidl_typesupport_fastrtps_c.h
