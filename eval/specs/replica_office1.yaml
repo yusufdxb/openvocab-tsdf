@@ -1,0 +1,79 @@
+# Replica office1 — hand-annotated ground-truth eval spec.
+#
+# The NICE-SLAM RGB-D dump does not ship semantic labels (upstream Meta
+# release does, via a separate form-gated download). Bboxes below were
+# derived from direct mesh inspection: floor/ceiling from the two strongest
+# horizontal-surface peaks in the z histogram, object bboxes from an
+# interior spatial density map projected onto the xy plane.
+#
+# Caveats:
+#   * Bboxes are conservatively wide (~1.4 m on a side) since we are scoring
+#     on cluster centroid, not IoU.
+#   * "the floor" / "the ceiling" bboxes are *exact* plane locations from the
+#     mesh and function as a geometric sanity check.
+#   * Object classes are best-guess from the density map; some entries may
+#     map to nearby objects. Treat this eval as relative-ordering rather than
+#     absolute accuracy.
+#
+# Regenerate/refine: `python scripts/inspect_replica_mesh.py --scene office1`.
+
+model: ViT-B-16
+pretrained: laion2b_s34b_b88k
+device: cuda:0
+dtype: fp16
+
+top_percentile: 0.005
+cluster_eps_vox: 2
+min_cluster_voxels: 20
+top_k: 5
+bbox_slack_m: 0.2
+
+cases:
+  # ---- Structural / geometry-derivable ground truth ----
+  - query: "the floor"
+    bbox_min: [-1.82, -1.58, -1.12]
+    bbox_max: [2.99, 2.52, -0.92]
+    kind: structural
+  - query: "the ceiling"
+    bbox_min: [-1.82, -1.58, 1.57]
+    bbox_max: [2.99, 2.52, 1.77]
+    kind: structural
+
+  # ---- Objects: hand-annotated from mesh density map ----
+  - query: "a desk"
+    # South cluster: x in [-1.0, +0.3], y in [-1.4, -0.5]
+    bbox_min: [-1.1, -1.5, -1.02]
+    bbox_max: [0.4, -0.4, -0.1]
+    kind: object
+  - query: "a chair"
+    # Central cluster around (0, +0.1), seat height
+    bbox_min: [-0.6, -0.5, -1.02]
+    bbox_max: [0.8, 0.7, -0.1]
+    kind: object
+  - query: "a monitor"
+    # Sits above desk region — desktop height band
+    bbox_min: [-1.1, -1.5, -0.3]
+    bbox_max: [0.4, -0.4, 0.5]
+    kind: loose
+  - query: "a bookshelf"
+    # East column at x ≈ +2.4..+2.9, y in [+0.4, +1.3]
+    bbox_min: [2.3, 0.3, -1.02]
+    bbox_max: [2.99, 1.4, 1.4]
+    kind: object
+  - query: "a couch"
+    # Upper-east dense block: x in [+1.4, +2.6], y in [+1.6, +2.3]
+    bbox_min: [1.3, 1.5, -1.02]
+    bbox_max: [2.7, 2.4, -0.1]
+    kind: object
+  - query: "a lamp"
+    # Mid-west tall cluster around (-1.4, -0.2)
+    bbox_min: [-1.82, -0.6, -1.02]
+    bbox_max: [-0.7, 0.4, 1.0]
+    kind: loose
+
+  # ---- Structural wall band ----
+  - query: "a window"
+    # Northern wall y ≈ +2.5, full x, mid z height
+    bbox_min: [-1.82, 2.3, -0.5]
+    bbox_max: [2.99, 2.52, 1.2]
+    kind: structural
