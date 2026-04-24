@@ -164,6 +164,69 @@ Fig: `figures/postfix_room0_sam/a_sofa.png` — the top-brightness-quartile heat
 - **Latency: 50–233 ms per query** (room0 sam_dense: 100 ms; room0 patch: 233 ms; office0: 50 ms). Includes text encode + voxel scan + connected-component cluster. Dominated by `MapBundle.score_query`'s `(Nx, Ny, Nz)` scatter at room scale.
 - **Encode throughput (post-fix, RTX 5070):** SAM-dense 0.5–0.6 fuse-FPS (100 frames in ~170–185 s); global 130–145 fuse-FPS (500 frames in ~3 s). Numbers preserved from the 2026-04-16 rerun stdout, not from a benchmark JSON.
 
+### Replica 8-scene aggregate (4 cm `block_hash` + `sam_dense`, 2026-04-19)
+
+The hoped-for "ScanNet substitute" result was weaker than the two-scene
+`room0` / `office0` story. We ran the same 100-frame / stride-20 profile
+across all eight NICE-SLAM Replica scenes available on disk and aggregated the
+per-scene metrics with an unweighted mean. The aggregate lands at **hit@1 =
+15.3 %**, **hit@5 = 44.9 %**, mean top-1 L2 = **3.18 m**. Source:
+`benchmarks/results/20260419T_full_replica_aggregate.json`.
+
+| scene | n_queries | hit@1 | hit@5 | mean top-1 L2 (m) | JSON |
+|---|---:|---:|---:|---:|---|
+| room0 | 9 | 22.2 % | 77.8 % | 2.76 | `20260419T025918Z_eval_grounding.json` |
+| room1 | 9 | 11.1 % | 55.6 % | 3.54 | `20260419T022432Z_eval_grounding.json` |
+| room2 | 9 | 0.0 % | 11.1 % | 4.04 | `20260419T023154Z_eval_grounding.json` |
+| office0 | 8 | 12.5 % | 75.0 % | 2.82 | `20260419T025330Z_eval_grounding.json` |
+| office1 | 9 | 0.0 % | 22.2 % | 2.64 | `20260419T023653Z_eval_grounding.json` |
+| office2 | 9 | 22.2 % | 22.2 % | 2.41 | `20260419T024224Z_eval_grounding.json` |
+| office3 | 10 | 10.0 % | 40.0 % | 4.45 | `20260419T025609Z_eval_grounding.json` |
+| office4 | 9 | 44.4 % | 55.6 % | 2.80 | `20260419T025845Z_eval_grounding.json` |
+| **aggregate** | **72** | **15.3 %** | **44.9 %** | **3.18** | `20260419T_full_replica_aggregate.json` |
+
+This is not a benchmark we can market as "robust cross-scene grounding." The
+variance is too high, and the 4 cm block-hash + SAM configuration that looks
+acceptable on `room0` does not generalize cleanly once the hand-annotated
+specs span eight scenes. The strongest interpretation is narrower:
+`block_hash` still earns its place on geometry / memory, but the current
+feature stack is not yet reliable enough to claim broad scene-level grounding.
+The likely next experiment is a stronger dense semantic head (LSeg / OpenSeg or
+another task-trained dense encoder), not more tuning on these loose CLIP-box
+specs.
+
+Reproduce the sweep:
+
+```bash
+./scripts/eval_all_replica.sh
+```
+
+### ScanNet v2 cross-scene eval (planned)
+
+Infrastructure is in place to run the same `block_hash` + `sam_dense` pipeline on
+ScanNet v2 scenes with proper semantic ground truth (NYU40 per-instance 3D bboxes
+extracted from the annotated mesh). This is the main remaining credibility piece —
+ScanNet provides real semantic labels, not hand-annotated bboxes from mesh inspection.
+
+```bash
+# 1. Download ScanNet data (requires signed ToU form)
+bash scripts/download_scannet.sh ~/data/scannet scene0011_00 scene0050_00 scene0231_00
+
+# 2. Generate eval specs from annotations
+python scripts/gen_scannet_eval_specs.py \
+    --root ~/data/scannet \
+    --scenes scene0011_00 scene0050_00 scene0231_00 \
+    --out-dir eval/specs/
+
+# 3. Run the full sweep
+./scripts/eval_all_scannet.sh --scenes scene0011_00,scene0050_00,scene0231_00
+```
+
+The ScanNet loader (`src/openvocab_tsdf/data/scannet.py`) reads the standard
+extracted format (color/depth/pose/intrinsic directories). The eval spec generator
+(`scripts/gen_scannet_eval_specs.py`) extracts per-instance 3D bounding boxes from
+the scene's `_vh_clean.aggregation.json` + `_vh_clean_2.ply` annotations.
+
 **CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
 - PyTorch: **1280 FPS**
 - TensorRT: **1414 FPS** (+10 %, parity-tested vs PyTorch with cosine > 0.98). See `benchmarks/bench_clip_encode.py`.
@@ -359,7 +422,7 @@ openvocab-tsdf/
 ├── configs/                  # YAML configs
 ├── docs/                     # architecture, decisions, design notes
 ├── src/openvocab_tsdf/
-│   ├── data/                 # dataset loaders (Replica, NICE-SLAM demo, synthetic)
+│   ├── data/                 # dataset loaders (Replica, ScanNet v2, NICE-SLAM demo, synthetic)
 │   ├── mapping/              # TSDF backends: reference (PyTorch dense), triton
 │   │                         # (sm_120 fast geometry), sparse_reference
 │   │                         # (lazy per-voxel features), block_hash (sparse

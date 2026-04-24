@@ -56,30 +56,35 @@ Touchpoints that actually changed: `pipeline.py` (save + ground_text load), `eva
 
 ---
 
-## Priority 3 — Scannet / ScanNet++ cross-scene eval
+## Priority 3 — ScanNet v2 cross-scene eval ✅ infrastructure done (2026-04-23)
 
-Current real-data eval is Replica `room0` + `office0` only. The original prompt called for "ScanNet or Replica for offline benchmarking." Replica is shipped with no semantic labels; ScanNet ships per-frame semantic masks and proper 3D object bboxes.
+All code is in place. Remaining step: download ScanNet data and run.
 
-**Done when:**
+**What shipped:**
+1. ✅ `src/openvocab_tsdf/data/scannet.py` — ScanNet v2 loader (extracted .sens format: color/depth/pose/intrinsic dirs). Skips frames with invalid poses. Handles color/depth resolution mismatch. 8 unit tests passing.
+2. ✅ `scripts/gen_scannet_eval_specs.py` — auto-generates eval specs from `_vh_clean.aggregation.json` + `_vh_clean_2.ply`. Extracts per-instance NYU40 3D bboxes + structural floor/ceiling queries. 2 unit tests passing (with plyfile).
+3. ✅ `scripts/download_scannet.sh` — download helper (wraps the official download-scannet.py + SensReader extraction).
+4. ✅ `scripts/eval_all_scannet.sh` — full sweep runner (auto-generates missing configs/specs, encodes, evaluates, aggregates).
+5. ✅ Configs for scene0011_00, scene0050_00, scene0231_00 (4cm block_hash + SAM-dense).
+6. ✅ `scannet` wired into `DatasetConfig` and `build_dataset()`.
+7. ✅ `plyfile` added as optional dep (`[scannet]`).
+8. ✅ README updated with ScanNet section.
 
-1. `src/openvocab_tsdf/data/scannet.py` loader that reads a standard ScanNet v2 scene (`scene0000_00` etc.) — color/depth/poses/intrinsics.
-2. `eval/specs/scannet_<scene>.yaml` auto-generated from the `_vh_clean.aggregation.json` + `_vh_clean_2.labels.ply` labels (per-instance 3D bboxes).
-3. One evaluation run across ≥5 ScanNet val scenes with ≥10 queries each. Publish `hit@1 / hit@5 / hit-L2` per scene + aggregate.
-4. README table updated with ScanNet results next to the existing Replica rows.
-
-**Why it matters.** Real semantic ground truth — not hand-annotated — is what takes this from "we think it works" to "it works, measured against standard benchmarks." The single biggest remaining credibility piece.
-
-**Blocker.** ScanNet requires signing a terms-of-use form. The user will need to do that once, then `scripts/download_datasets.sh scannet` can be fleshed out to fetch.
+**Still needed:**
+1. Sign the ScanNet ToU form (http://kaldir.vc.in.tum.de/scannet/ScanNet_TOS.pdf), email to scannet@googlegroups.com.
+2. Download + extract ≥5 scenes via `scripts/download_scannet.sh`.
+3. Run `scripts/eval_all_scannet.sh` and publish aggregate results.
+4. Update README table with real ScanNet numbers.
 
 ---
 
-## Priority 4 — polish + ship
+## Priority 4 — polish + ship (partially done)
 
-1. **GitHub Actions CI** — `.github/workflows/ci.yml` that runs `ruff check`, `black --check`, and `pytest -m "not gpu and not dataset and not slow"` on pushes to `main`. Non-GPU subset (~4 tests currently — extend this coverage too).
-2. **Dockerfile** — minimal reproducibility env based on `nvcr.io/nvidia/pytorch:25.09-py3` or similar, wrapping the `uv sync` + ROS 2 Humble install. Document the `PYTHONPATH` layering needed for the ROS 2 node.
-3. **Push to GitHub.** Repo is still local-only.
-4. **`CITATION.cff`** + LICENSE hygiene.
-5. **`docs/paper_outline.md`** — 4-page workshop-style writeup (RSS Workshop on Open-Vocab Robotics or similar). Abstract + problem statement + system figure + table of results + related work. Use the existing figures.
+1. ✅ **GitHub Actions CI** — `.github/workflows/ci.yml` runs `ruff check`, `black --check`, `pytest -m "not slow and not gpu and not dataset and not benchmark"` on push/PR to main.
+2. 🔲 **Dockerfile** — minimal reproducibility env based on `nvcr.io/nvidia/pytorch:25.09-py3` or similar, wrapping the `uv sync` + ROS 2 Humble install.
+3. ✅ **Pushed to GitHub.** `yusufdxb/openvocab-tsdf` (private).
+4. ✅ **`CITATION.cff`** + MIT `LICENSE`.
+5. 🔲 **`docs/paper_outline.md`** — 4-page workshop-style writeup.
 
 ---
 
@@ -103,7 +108,7 @@ Current real-data eval is Replica `room0` + `office0` only. The original prompt 
 cd /home/yusuf/Projects/personal/openvocab-tsdf
 .venv/bin/ruff check src tests benchmarks scripts eval ros2_ws
 .venv/bin/black --check --target-version py310 src tests benchmarks scripts eval
-.venv/bin/pytest tests/ -q                       # expect 38+4 slow
+.venv/bin/pytest tests/ -q                       # expect 64 passed + 3 skipped (TRT)
 .venv/bin/python scripts/demo_synthetic.py       # smoke (no dataset)
 bash scripts/live_smoke_test.sh                  # live ROS 2 smoke
 ```

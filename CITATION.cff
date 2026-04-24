@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "openvocab-tsdf: GPU-accelerated open-vocabulary 3D mapping and language grounding"
+type: software
+authors:
+  - given-names: Yusuf
+    family-names: Guenena
+    email: yusuf.a.guenena@gmail.com
+    orcid: ""
+license: MIT
+repository-code: "https://github.com/yusufdxb/openvocab-tsdf"
+version: "0.1.0-dev"
+date-released: "2026-04-13"
+keywords:
+  - tsdf
+  - open-vocabulary
+  - 3d-mapping
+  - clip
+  - robotics
+  - ros2
+  - cuda
+  - language-grounding

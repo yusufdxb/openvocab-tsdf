@@ -46,6 +46,17 @@ def build_dataset(cfg: Config) -> RGBDDataset:
             max_frames=d.max_frames,
             stride=d.stride,
         )
+    if d.name == "scannet":
+        from openvocab_tsdf.data.scannet import ScanNetDataset
+
+        return ScanNetDataset(
+            root=d.root,
+            scene=d.scene,
+            depth_scale=cfg.camera.depth_scale,
+            depth_trunc_m=cfg.camera.depth_trunc_m,
+            max_frames=d.max_frames,
+            stride=d.stride,
+        )
     raise NotImplementedError(f"dataset '{d.name}' not implemented yet")
 
 

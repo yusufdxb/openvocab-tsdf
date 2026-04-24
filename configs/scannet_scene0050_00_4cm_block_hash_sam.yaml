@@ -1,0 +1,44 @@
+# ScanNet v2 scene0050_00 — 4 cm voxels, SAM-per-mask CLIP dense features, block_hash backend.
+
+dataset:
+  name: scannet
+  root: ~/data/scannet
+  scene: scene0050_00
+  max_frames: 100
+  stride: 20
+
+camera:
+  depth_scale: 1000.0
+  depth_trunc_m: 6.0
+
+mapping:
+  voxel_size_m: 0.04
+  truncation_distance_m: 0.16
+  block_size: 8
+  backend: block_hash
+  device: cuda:0
+  store_color: true
+  store_features: true
+  feature_dim: 512
+  auto_bounds_radius_m: 5.0
+  max_weight: 32.0
+  initial_feat_capacity: 262144
+  max_feat_capacity: 8000000
+
+semantics:
+  model: ViT-B-16
+  pretrained: laion2b_s34b_b88k
+  mode: sam_dense
+  batch_size: 32
+  device: cuda:0
+  dtype: fp16
+
+grounding:
+  top_k: 5
+  score_threshold: 0.22
+  cluster_eps_vox: 2
+  min_cluster_voxels: 8
+
+logging:
+  level: INFO
+  rich_tracebacks: true

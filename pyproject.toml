@@ -55,6 +55,9 @@ dev = [
 dense = [
   "segment-anything>=1.0",
 ]
+scannet = [
+  "plyfile>=1.0",
+]
 
 [project.scripts]
 openvocab-tsdf = "openvocab_tsdf.cli:app"

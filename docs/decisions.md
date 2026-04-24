@@ -263,3 +263,64 @@ densification ceiling documented in
 follow-up.
 
 ---
+
+## 2026-04-19 — Replica 8-scene aggregate as the honest ScanNet substitute
+
+**Decision.** Ship the Replica 8-scene aggregate result, even though it
+underperforms the optimistic design target and materially weakens the
+"room0 works" story. The result lives in
+`benchmarks/results/20260419T_full_replica_aggregate.json` and is
+summarized in the README.
+
+**What we ran.** The same 4 cm `block_hash` + `sam_dense` + 100 frames /
+stride 20 profile was evaluated on the eight NICE-SLAM Replica scenes
+available on disk (`room0`, `room1`, `room2`, `office0`, `office1`,
+`office2`, `office3`, `office4`). The per-scene JSONs are:
+
+- `20260419T025918Z_eval_grounding.json` — room0
+- `20260419T022432Z_eval_grounding.json` — room1
+- `20260419T023154Z_eval_grounding.json` — room2
+- `20260419T025330Z_eval_grounding.json` — office0
+- `20260419T023653Z_eval_grounding.json` — office1
+- `20260419T024224Z_eval_grounding.json` — office2
+- `20260419T025609Z_eval_grounding.json` — office3
+- `20260419T025845Z_eval_grounding.json` — office4
+
+Unweighted aggregate across scenes:
+
+- `mean_hit@1 = 15.3 %`
+- `mean_hit@5 = 44.9 %`
+- `mean_top1_l2_m = 3.18`
+
+The best scene in this sweep is `office4` at 44.4 % / 55.6 %; the worst
+is `room2` at 0.0 % / 11.1 %.
+
+**Why publish it anyway.** Priority 3 in `CLAUDE_CODE_NEXT.md` was a
+standard-dataset cross-scene credibility pass (ScanNet), but ScanNet is
+still blocked on the terms-of-use form. The Replica aggregate is the
+closest no-excuses substitute available on disk. Dropping the weak
+scenes would make the repository read better and the evidence worse.
+
+**Interpretation.** This result does **not** support a claim of robust
+cross-scene grounding. It supports a narrower claim:
+
+1. `block_hash` is still a useful systems contribution because the
+   geometry / memory story holds up across scenes.
+2. The current semantic stack (MobileSAM masks + CLIP crops fused into
+   4 cm voxels, evaluated with loose centroid-in-box specs) is too
+   brittle to generalize across eight scenes.
+3. More hand-tuning of bbox specs is unlikely to change the qualitative
+   conclusion. The next real lever is a stronger dense semantic encoder
+   or a benchmark with real semantic labels (ScanNet once unblocked).
+
+**Method caveat.** These are hand-authored Replica specs, not dataset
+labels or IoU metrics. That caveat already existed on `room0` / `office0`
+and gets worse, not better, at eight scenes. The aggregate is still worth
+publishing because it prevents the repo from over-claiming.
+
+**Follow-up triggered by this result.** Stop treating the 4 cm
+`block_hash` + `sam_dense` sweep as the "headline quality" configuration.
+Keep it as the memory / scalability systems story; pursue dense
+semantics improvements separately.
+
+---

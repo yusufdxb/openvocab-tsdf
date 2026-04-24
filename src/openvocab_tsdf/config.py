@@ -14,10 +14,7 @@ from pydantic import BaseModel, Field
 
 
 class DatasetConfig(BaseModel):
-    # Only loaders that exist in `data/` are listed here. ScanNet / TUM /
-    # custom datasets are explicit follow-ups (see CLAUDE_CODE_NEXT.md);
-    # exposing them in the literal would falsely advertise support.
-    name: Literal["replica", "nice_slam_demo"] = "replica"
+    name: Literal["replica", "nice_slam_demo", "scannet"] = "replica"
     root: Path
     scene: str
     max_frames: int | None = None
