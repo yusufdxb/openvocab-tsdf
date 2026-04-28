@@ -75,8 +75,7 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
 
     if encoder.cfg.model != bundle.meta.model and bundle.meta.model:
         log.warning(
-            "model mismatch: map built with %r, eval spec uses %r — "
-            "results may be invalid",
+            "model mismatch: map built with %r, eval spec uses %r — " "results may be invalid",
             bundle.meta.model,
             encoder.cfg.model,
         )
