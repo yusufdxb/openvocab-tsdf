@@ -58,6 +58,9 @@ dense = [
 scannet = [
   "plyfile>=1.0",
 ]
+lseg = [
+  "timm>=0.9",
+]
 
 [project.scripts]
 openvocab-tsdf = "openvocab_tsdf.cli:app"
