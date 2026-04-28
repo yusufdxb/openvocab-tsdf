@@ -1,0 +1,105 @@
+{
+  "timestamp": "2026-04-19T02:36:53+00:00",
+  "map": "outputs/replica_office1_4cm_block_hash_sam.npz",
+  "spec": "eval/specs/replica_office1.yaml",
+  "summary": {
+    "num_cases": 9,
+    "hit@1": 0.0,
+    "hit@5": 0.2222222222222222,
+    "mean_top1_l2_m": 2.6375828851783734,
+    "mean_top1_l2_m_hit_only": 1.9599530661207836,
+    "mean_latency_s": 0.13078052744458546
+  },
+  "per_case": [
+    {
+      "query": "the floor",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 3.078493810201997,
+      "top1_score": -2592.465087890625,
+      "latency_s": 0.21432112700040307,
+      "num_results": 5
+    },
+    {
+      "query": "the ceiling",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 1.9128055157757613,
+      "top1_score": -2222.1142578125,
+      "latency_s": 0.09678483700008655,
+      "num_results": 5
+    },
+    {
+      "query": "a desk",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 4.1587736872992425,
+      "top1_score": 0.17224276065826416,
+      "latency_s": 0.11120731000028172,
+      "num_results": 5
+    },
+    {
+      "query": "a chair",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 2,
+      "top1_centroid_l2_m": 1.3725887251145072,
+      "top1_score": -1481.362548828125,
+      "latency_s": 0.1177066090003791,
+      "num_results": 5
+    },
+    {
+      "query": "a monitor",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 2.401208053115255,
+      "top1_score": 0.18440991640090942,
+      "latency_s": 0.10621882400027971,
+      "num_results": 5
+    },
+    {
+      "query": "a bookshelf",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 3.5727054894893677,
+      "top1_score": -1481.3876953125,
+      "latency_s": 0.14897377499983122,
+      "num_results": 5
+    },
+    {
+      "query": "a couch",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 3.212428765423727,
+      "top1_score": 0.16352388262748718,
+      "latency_s": 0.13286177600002702,
+      "num_results": 5
+    },
+    {
+      "query": "a lamp",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 1.481924513058441,
+      "top1_score": -1110.98974609375,
+      "latency_s": 0.15165417200023512,
+      "num_results": 5
+    },
+    {
+      "query": "a window",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 2,
+      "top1_centroid_l2_m": 2.54731740712706,
+      "top1_score": -1110.9866943359375,
+      "latency_s": 0.09729631699974561,
+      "num_results": 5
+    }
+  ]
+}

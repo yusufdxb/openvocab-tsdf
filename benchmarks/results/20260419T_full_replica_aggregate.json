@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-04-19T02:59:37+00:00",
+  "per_scene": {
+    "room0": {
+      "hit@1": 0.2222222222222222,
+      "hit@5": 0.7777777777777778,
+      "mean_top1_l2_m": 2.7583664597617683,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T025918Z_eval_grounding.json"
+    },
+    "room1": {
+      "hit@1": 0.1111111111111111,
+      "hit@5": 0.5555555555555556,
+      "mean_top1_l2_m": 3.538174364424508,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T022432Z_eval_grounding.json"
+    },
+    "room2": {
+      "hit@1": 0.0,
+      "hit@5": 0.1111111111111111,
+      "mean_top1_l2_m": 4.036708712356329,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T023154Z_eval_grounding.json"
+    },
+    "office0": {
+      "hit@1": 0.125,
+      "hit@5": 0.75,
+      "mean_top1_l2_m": 2.8244355102025684,
+      "n_queries": 8,
+      "source": "benchmarks/results/20260419T025330Z_eval_grounding.json"
+    },
+    "office1": {
+      "hit@1": 0.0,
+      "hit@5": 0.2222222222222222,
+      "mean_top1_l2_m": 2.6375828851783734,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T023653Z_eval_grounding.json"
+    },
+    "office2": {
+      "hit@1": 0.2222222222222222,
+      "hit@5": 0.2222222222222222,
+      "mean_top1_l2_m": 2.409670269717349,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T024224Z_eval_grounding.json"
+    },
+    "office3": {
+      "hit@1": 0.1,
+      "hit@5": 0.4,
+      "mean_top1_l2_m": 4.447749377161438,
+      "n_queries": 10,
+      "source": "benchmarks/results/20260419T025609Z_eval_grounding.json"
+    },
+    "office4": {
+      "hit@1": 0.4444444444444444,
+      "hit@5": 0.5555555555555556,
+      "mean_top1_l2_m": 2.803547064549442,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T025845Z_eval_grounding.json"
+    }
+  },
+  "aggregate": {
+    "n_scenes": 8,
+    "total_queries": 72,
+    "mean_hit@1": 0.153125,
+    "mean_hit@5": 0.4493055555555556,
+    "mean_top1_l2_m": 3.182029330418972
+  }
+}
