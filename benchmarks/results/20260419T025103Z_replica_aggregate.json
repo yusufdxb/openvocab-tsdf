@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-04-19T02:58:46+00:00",
+  "per_scene": {
+    "office0": {
+      "hit@1": 0.125,
+      "hit@5": 0.75,
+      "mean_top1_l2_m": 2.8244355102025684,
+      "n_queries": 8,
+      "source": "benchmarks/results/20260419T025330Z_eval_grounding.json"
+    },
+    "office3": {
+      "hit@1": 0.1,
+      "hit@5": 0.4,
+      "mean_top1_l2_m": 4.447749377161438,
+      "n_queries": 10,
+      "source": "benchmarks/results/20260419T025609Z_eval_grounding.json"
+    },
+    "office4": {
+      "hit@1": 0.4444444444444444,
+      "hit@5": 0.5555555555555556,
+      "mean_top1_l2_m": 2.803547064549442,
+      "n_queries": 9,
+      "source": "benchmarks/results/20260419T025845Z_eval_grounding.json"
+    }
+  },
+  "aggregate": {
+    "n_scenes": 3,
+    "total_queries": 27,
+    "mean_hit@1": 0.22314814814814812,
+    "mean_hit@5": 0.5685185185185185,
+    "mean_top1_l2_m": 3.358577317304483
+  }
+}
