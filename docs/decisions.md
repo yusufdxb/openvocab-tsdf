@@ -324,3 +324,39 @@ Keep it as the memory / scalability systems story; pursue dense
 semantics improvements separately.
 
 ---
+
+## 2026-04-23 — ViT-L/14 SAM-dense encoder upgrade
+
+**Decision.** Add ViT-L/14 as a second SAM-dense CLIP encoder via config-only change. ViT-L/14 produces 768-d features vs ViT-B/16's 512-d.
+
+**Rationale.** The 8-scene Replica aggregate hit@1 is 15.3% — the feature stack is the ceiling, not the backend. ViT-L/14 is a stronger encoder that may improve grounding accuracy with no pipeline code changes.
+
+**VRAM.** ViT-L/14 is ~1.5 GB vs ViT-B/16's ~0.5 GB. With MobileSAM (~150 MB) and a 4 cm block_hash volume (~1.8 GB), total is ~3.5 GB. Fits in 12 GB.
+
+**Status.** Configs landed (`configs/replica_room0_4cm_block_hash_sam_vitl14.yaml`, `configs/replica_office0_4cm_block_hash_sam_vitl14.yaml`). End-to-end encode+eval deferred — needs ~1.5 GB ViT-L/14 download and a fresh MobileSAM run.
+
+## 2026-04-23 — LSeg dense encoder (mode: "lseg")
+
+**Decision.** Add LSeg as a new `mode: "lseg"` — a DPT backbone producing per-pixel 512-d features aligned with CLIP ViT-B/32, in a single forward pass with no SAM masks.
+
+**Rationale.** SAM-dense is bottlenecked by mask generation (~0.6 FPS). LSeg bypasses this entirely. The trade-off is that LSeg uses a fixed pre-trained checkpoint (Intel ISL, archived) while SAM-dense benefits from any CLIP upgrade.
+
+**Interoperability.** LSeg maps store `model: ViT-B-32` and `pretrained: openai`. They are NOT interchangeable with ViT-B/16 or ViT-L/14 maps for text queries. Model-name validation at load time prevents mismatched cosine scores.
+
+**Status.** Encoder class shipped (`src/openvocab_tsdf/semantics/lseg_encoder.py`), pipeline wired (`encode_and_fuse` accepts `mode: "lseg"`), shape unit tests green. End-to-end encode+eval deferred — needs the 400 MB LSeg checkpoint download.
+
+## 2026-04-23 — Model-name validation at map load
+
+**Decision.** `ground_text()` now validates that the text encoder model matches the map's stored `model` key via `_validate_model_match`. Mismatched encoders raise `ValueError`. Maps with empty `model` (legacy) bypass the check.
+
+**Rationale.** With three encoder modes producing features in different CLIP text spaces (ViT-B/16, ViT-L/14, ViT-B/32), silently using the wrong text encoder produces garbage cosine scores. Fail-fast is strictly better. The eval harness logs a warning instead of raising so the existing eval specs (which can override `model`) keep working.
+
+## 2026-04-23 — Dockerfile (offline pipeline only)
+
+**Decision.** Ship a minimal Dockerfile based on `nvcr.io/nvidia/pytorch:24.09-py3` that covers the offline pipeline (fuse, encode, eval, ground). ROS 2 Humble is excluded (would triple image size).
+
+**Rationale.** Reproducibility for paper reviewers and collaborators. The ROS 2 deployment is a separate concern with its own colcon build.
+
+**Status.** Dockerfile + .dockerignore committed. End-to-end build (`docker build -t openvocab-tsdf:latest .`) not exercised in this session — the base image pull alone is multi-GB.
+
+---
