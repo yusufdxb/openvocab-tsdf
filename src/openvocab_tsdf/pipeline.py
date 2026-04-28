@@ -196,12 +196,18 @@ def encode_and_fuse(
     if m.backend not in ("reference", "sparse_feature", "block_hash"):
         log.warning("backend %r does not support feature storage; forcing reference", m.backend)
         m.backend = "reference"  # fall through
-    if mode in ("patch", "sam_dense") and m.backend == "sparse_feature":
+    if mode in ("patch", "sam_dense", "lseg") and m.backend == "sparse_feature":
         log.warning("sparse_feature backend does not support %r mode yet; forcing global", mode)
         mode = "global"
     if mode == "patch" and m.backend == "block_hash":
         log.warning("block_hash backend does not support patch mode yet; forcing global")
         mode = "global"
+    if mode == "lseg" and m.backend == "block_hash" and m.feature_dim != 512:
+        log.warning(
+            "lseg produces 512-d features; overriding feature_dim from %d to 512",
+            m.feature_dim,
+        )
+        m.feature_dim = 512
 
     # Build the volume using `build_tsdf` (shared path with fuse)
     # but force store_features on.
@@ -276,17 +282,29 @@ def encode_and_fuse(
         )
         vol = ReferenceTSDF(ref_cfg)
 
-    encoder = OpenCLIPEncoder(
-        OpenCLIPConfig(
-            model=cfg.semantics.model,
-            pretrained=cfg.semantics.pretrained,
+    if mode == "lseg":
+        from openvocab_tsdf.semantics.lseg_encoder import LSegEncoder
+
+        lseg_enc = LSegEncoder(
+            weights_path=cfg.semantics.lseg_weights_path,
             device=cfg.semantics.device,
-            dtype=cfg.semantics.dtype,
         )
-    )
-    if encoder.feature_dim != m.feature_dim:
+        feature_dim = lseg_enc.FEATURE_DIM
+        encoder = None
+    else:
+        encoder = OpenCLIPEncoder(
+            OpenCLIPConfig(
+                model=cfg.semantics.model,
+                pretrained=cfg.semantics.pretrained,
+                device=cfg.semantics.device,
+                dtype=cfg.semantics.dtype,
+            )
+        )
+        feature_dim = encoder.feature_dim
+        lseg_enc = None
+    if feature_dim != m.feature_dim:
         raise ValueError(
-            f"feature_dim mismatch: encoder={encoder.feature_dim}, mapping.feature_dim={m.feature_dim}"
+            f"feature_dim mismatch: encoder={feature_dim}, mapping.feature_dim={m.feature_dim}"
         )
 
     # materialize frames list when needed (we need to batch colors for CLIP)
@@ -309,6 +327,8 @@ def encode_and_fuse(
             SAMDenseConfig(device=cfg.semantics.device), encoder
         )
         img_feats = None  # features computed lazily per-frame (too big to keep all)
+    elif mode == "lseg":
+        img_feats = None  # dense features computed per-frame, no batch encode step
     else:
         raise NotImplementedError(f"semantics.mode={mode!r} not implemented")
     enc_s = time.perf_counter() - t0
@@ -325,13 +345,22 @@ def encode_and_fuse(
                 feature_map_input_size=encoder.input_size,
                 feature_map_patch_size=encoder.patch_size,
             )
-    else:  # sam_dense
+    elif mode == "sam_dense":
         for i, frame in enumerate(frame_list):
             dfm_np = sam_extractor.extract(frame.color)
             dfm = torch.from_numpy(dfm_np).to(cfg.semantics.device)
             vol.integrate(frame, dense_feature_map=dfm)
             if (i + 1) % 25 == 0:
                 log.info("sam_dense: integrated %d / %d", i + 1, len(frame_list))
+    elif mode == "lseg":
+        for i, frame in enumerate(frame_list):
+            dfm_np = lseg_enc.extract(frame.color)
+            dfm = torch.from_numpy(dfm_np).to(cfg.semantics.device)
+            vol.integrate(frame, dense_feature_map=dfm)
+            if (i + 1) % 25 == 0:
+                log.info("lseg: integrated %d / %d", i + 1, len(frame_list))
+    else:
+        raise NotImplementedError(f"semantics.mode={mode!r} not implemented")
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     fuse_s = time.perf_counter() - t0
@@ -340,14 +369,20 @@ def encode_and_fuse(
     # `sparse_kind` ("dense" / "voxel_slot" / "block_hash") selects the load path.
     # `sparse` stays as a bool for back-compat with maps saved before sparse_kind existed.
     map_out.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "lseg":
+        saved_model = lseg_enc.TEXT_MODEL
+        saved_pretrained = lseg_enc.TEXT_PRETRAINED
+    else:
+        saved_model = cfg.semantics.model
+        saved_pretrained = cfg.semantics.pretrained
     save_kwargs = {
         "origin": vol.origin.cpu().numpy(),
         "voxel_size": np.float32(vol.voxel_size_m),
         "truncation": np.float32(vol.truncation_distance_m),
         "dims": np.int64(vol.dims),
-        "feature_dim": np.int64(encoder.feature_dim),
-        "model": np.array(cfg.semantics.model, dtype=object),
-        "pretrained": np.array(cfg.semantics.pretrained, dtype=object),
+        "feature_dim": np.int64(feature_dim),
+        "model": np.array(saved_model, dtype=object),
+        "pretrained": np.array(saved_pretrained, dtype=object),
         "mode": np.array(mode, dtype=object),
     }
     if isinstance(vol, BlockHashTSDF):
@@ -367,7 +402,7 @@ def encode_and_fuse(
             save_kwargs["feat_voxel_slot"] = vol._feat_voxel_slot[:nb].cpu().numpy()
             save_kwargs["feat_pool"] = vol._feat_pool[:nfv].cpu().numpy()
         geom_mb = nb * BLOCK3 * (4 + 4 + (12 if vol._color_pool is not None else 0)) / (1024**2)
-        feat_mb = nfv * encoder.feature_dim * 4 / (1024**2) if vol._store_features else 0.0
+        feat_mb = nfv * feature_dim * 4 / (1024**2) if vol._store_features else 0.0
         log.info(
             "saving block_hash map: %d blocks / %d feat voxels, %.1f MB geom + %.1f MB feat",
             nb,
@@ -387,7 +422,7 @@ def encode_and_fuse(
         log.info(
             "saving sparse map: %d allocated voxels, %.1f MB pool",
             n,
-            n * encoder.feature_dim * 4 / (1024**2),
+            n * feature_dim * 4 / (1024**2),
         )
     else:
         save_kwargs["tsdf"] = vol.tsdf.cpu().numpy()
@@ -412,7 +447,7 @@ def encode_and_fuse(
         "fuse_s": fuse_s,
         "map_path": str(map_out),
         "dims": list(vol.dims),
-        "feature_dim": int(encoder.feature_dim),
+        "feature_dim": int(feature_dim),
     }
 
 
