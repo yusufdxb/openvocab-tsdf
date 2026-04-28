@@ -1,0 +1,79 @@
+# Replica office4 — hand-annotated ground-truth eval spec.
+#
+# The NICE-SLAM RGB-D dump does not ship semantic labels (upstream Meta
+# release does, via a separate form-gated download). Bboxes below were
+# derived from direct mesh inspection: floor/ceiling from the two strongest
+# horizontal-surface peaks in the z histogram, object bboxes from an
+# interior spatial density map projected onto the xy plane.
+#
+# Caveats:
+#   * Bboxes are conservatively wide (~1.5-2.0 m on a side) since we are
+#     scoring on cluster centroid, not IoU.
+#   * "the floor" / "the ceiling" bboxes are exact plane locations from the
+#     mesh and function as a geometric sanity check.
+#   * East-wall storage and the north-west counter are easy to see in the
+#     density map; the center and south-east furniture are less certain, so
+#     those queries are marked loose where needed.
+#
+# Regenerate/refine: `python scripts/inspect_replica_mesh.py --scene office4`.
+
+model: ViT-B-16
+pretrained: laion2b_s34b_b88k
+device: cuda:0
+dtype: fp16
+
+top_percentile: 0.005
+cluster_eps_vox: 2
+min_cluster_voxels: 20
+top_k: 5
+bbox_slack_m: 0.2
+
+cases:
+  # ---- Structural / geometry-derivable ground truth ----
+  - query: "the floor"
+    bbox_min: [-1.20, -2.33, -1.28]
+    bbox_max: [5.34, 4.18, -1.08]
+    kind: structural
+  - query: "the ceiling"
+    bbox_min: [-1.20, -2.33, 1.42]
+    bbox_max: [5.34, 4.18, 1.62]
+    kind: structural
+
+  # ---- Objects: hand-annotated from mesh density map ----
+  - query: "a desk"
+    # Dense north-west band: x in [-1.0, +1.2], y in [+3.1, +4.1]
+    bbox_min: [-1.00, 3.00, -1.18]
+    bbox_max: [1.40, 4.18, -0.15]
+    kind: object
+  - query: "a chair"
+    # Central cluster around (+1.8, +0.8) at seat height
+    bbox_min: [1.10, 0.20, -1.18]
+    bbox_max: [2.80, 1.60, -0.20]
+    kind: object
+  - query: "a couch"
+    # South-east cluster spanning x in [+2.1, +4.8], y in [-2.3, -1.4]
+    bbox_min: [2.00, -2.33, -1.18]
+    bbox_max: [4.90, -1.20, -0.20]
+    kind: loose
+  - query: "a bookshelf"
+    # Tall east-wall storage column near x ≈ +5.0
+    bbox_min: [4.70, -2.20, -1.18]
+    bbox_max: [5.34, 4.18, 1.30]
+    kind: object
+  - query: "a monitor"
+    # Above the central desk/table region
+    bbox_min: [1.10, 0.20, -0.45]
+    bbox_max: [2.80, 1.60, 0.60]
+    kind: loose
+  - query: "a lamp"
+    # South-central tall clutter cluster around (+0.8, -1.8)
+    bbox_min: [0.20, -2.20, -0.80]
+    bbox_max: [1.60, -1.10, 1.10]
+    kind: loose
+
+  # ---- Structural wall band ----
+  - query: "a window"
+    # North wall strip at y ≈ +4.0, mid-z band
+    bbox_min: [-1.00, 3.85, -0.50]
+    bbox_max: [3.40, 4.18, 1.20]
+    kind: structural
