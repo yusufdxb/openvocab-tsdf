@@ -60,12 +60,16 @@ class MappingConfig(BaseModel):
 class SemanticsConfig(BaseModel):
     model: str = "ViT-B-16"
     pretrained: str = "laion2b_s34b_b88k"
-    # `mask` is not implemented; the only dense path that exists is
-    # `sam_dense` (mask-features pipeline via MobileSAM + per-mask CLIP).
-    mode: Literal["global", "patch", "sam_dense"] = "global"
+    # `mask` is not implemented; the dense paths that exist are
+    # `sam_dense` (mask-features pipeline via MobileSAM + per-mask CLIP) and
+    # `lseg` (DPT-Large dense per-pixel features aligned with CLIP ViT-B/32).
+    mode: Literal["global", "patch", "sam_dense", "lseg"] = "global"
     batch_size: int = 16
     device: str = "cuda:0"
     dtype: Literal["fp16", "fp32"] = "fp16"
+    # lseg mode only: path to the LSeg checkpoint (DPT backbone + per-pixel
+    # head). Download via scripts/download_lseg_weights.sh.
+    lseg_weights_path: str = "~/.cache/openvocab_tsdf/weights/lseg_minimal_e200.ckpt"
 
 
 class GroundingConfig(BaseModel):
