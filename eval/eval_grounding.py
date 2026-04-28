@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,8 @@ import yaml
 from openvocab_tsdf.grounding.map_bundle import MapBundle
 from openvocab_tsdf.grounding.query import rank_query
 from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
+
+log = logging.getLogger(__name__)
 
 
 def _load_spec(path: Path) -> dict:
@@ -69,6 +72,14 @@ def run_eval(map_path: Path, spec_path: Path, out_dir: Path) -> dict:
             dtype=dtype,
         )
     )
+
+    if encoder.cfg.model != bundle.meta.model and bundle.meta.model:
+        log.warning(
+            "model mismatch: map built with %r, eval spec uses %r — "
+            "results may be invalid",
+            bundle.meta.model,
+            encoder.cfg.model,
+        )
 
     cases = spec["cases"]
     per_case = []

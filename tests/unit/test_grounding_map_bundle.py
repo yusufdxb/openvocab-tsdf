@@ -218,3 +218,57 @@ def test_map_bundle_dense_vs_voxel_slot_score_parity(tmp_path: Path) -> None:
     observed_both = near_surface & (b_dense.weight > 0) & (b_sparse.weight > 0)
     diff = (s_dense[observed_both] - s_sparse[observed_both]).abs().max().item()
     assert diff < 1e-5, f"dense vs voxel_slot score diverged on near-surface voxels: {diff}"
+
+
+def test_model_mismatch_raises(tmp_path):
+    """Loading a map with model=ViT-B-16 and querying with ViT-L-14 should raise."""
+    npz_path = tmp_path / "map.npz"
+    dims = (4, 4, 4)
+    np.savez_compressed(
+        npz_path,
+        origin=np.zeros(3, dtype=np.float32),
+        voxel_size=np.float32(0.04),
+        truncation=np.float32(0.16),
+        dims=np.array(dims, dtype=np.int64),
+        feature_dim=np.int64(512),
+        model=np.array("ViT-B-16", dtype=object),
+        pretrained=np.array("laion2b_s34b_b88k", dtype=object),
+        mode=np.array("sam_dense", dtype=object),
+        sparse=np.bool_(False),
+        sparse_kind=np.array("dense", dtype=object),
+        tsdf=np.ones(dims, dtype=np.float32),
+        weight=np.ones(dims, dtype=np.float32),
+        feat=np.random.randn(*dims, 512).astype(np.float32),
+    )
+    from openvocab_tsdf.pipeline import _validate_model_match
+
+    bundle = MapBundle(npz_path, device="cpu")
+    # Same model — should pass
+    _validate_model_match(bundle.meta, "ViT-B-16")
+    # Different model — should raise
+    with pytest.raises(ValueError, match="model mismatch"):
+        _validate_model_match(bundle.meta, "ViT-L-14")
+
+
+def test_model_match_empty_meta_passes(tmp_path):
+    """Maps with empty model field (legacy) should not block grounding."""
+    npz_path = tmp_path / "map_legacy.npz"
+    dims = (4, 4, 4)
+    np.savez_compressed(
+        npz_path,
+        origin=np.zeros(3, dtype=np.float32),
+        voxel_size=np.float32(0.04),
+        truncation=np.float32(0.16),
+        dims=np.array(dims, dtype=np.int64),
+        feature_dim=np.int64(512),
+        sparse=np.bool_(False),
+        sparse_kind=np.array("dense", dtype=object),
+        tsdf=np.ones(dims, dtype=np.float32),
+        weight=np.ones(dims, dtype=np.float32),
+        feat=np.random.randn(*dims, 512).astype(np.float32),
+    )
+    from openvocab_tsdf.pipeline import _validate_model_match
+
+    bundle = MapBundle(npz_path, device="cpu")
+    # No stored model -> should not raise even with arbitrary query model
+    _validate_model_match(bundle.meta, "ViT-L-14")

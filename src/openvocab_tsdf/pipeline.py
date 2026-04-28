@@ -151,6 +151,24 @@ def build_tsdf(cfg: Config, dataset: RGBDDataset) -> TSDFVolume:
     raise NotImplementedError(f"mapping backend '{m.backend}' not implemented")
 
 
+def _validate_model_match(meta, query_model: str) -> None:
+    """Raise if the text encoder model doesn't match what was used to build the map.
+
+    Maps store the encoder model in their metadata (`model` key). With three
+    encoder modes producing features in different CLIP text spaces (ViT-B/16,
+    ViT-L/14, ViT-B/32 for LSeg), silently using the wrong text encoder yields
+    garbage cosine scores. Fail-fast.
+
+    Empty `meta.model` (legacy maps from before model-name persistence) is
+    treated as a no-op so older maps remain queryable.
+    """
+    if meta.model and meta.model != query_model:
+        raise ValueError(
+            f"model mismatch: map was built with {meta.model!r} but "
+            f"query uses {query_model!r}. Cosine scores will be meaningless."
+        )
+
+
 def _frame_to_pil(frame: RGBDFrame):
     from PIL import Image
 
@@ -429,6 +447,7 @@ def ground_text(
     from openvocab_tsdf.semantics.openclip_encoder import OpenCLIPConfig, OpenCLIPEncoder
 
     bundle = MapBundle(map_path, device=device)
+    _validate_model_match(bundle.meta, model)
     encoder = OpenCLIPEncoder(
         OpenCLIPConfig(model=model, pretrained=pretrained, device=device, dtype=dtype)
     )
