@@ -1,0 +1,95 @@
+{
+  "timestamp": "2026-05-10T04:47:13+00:00",
+  "map": "outputs/replica_office0_4cm_block_hash_sam_vitl14.npz",
+  "spec": "/tmp/openvocab_eval_specs/replica_office0_vitl14.yaml",
+  "summary": {
+    "num_cases": 8,
+    "hit@1": 0.25,
+    "hit@5": 0.75,
+    "mean_top1_l2_m": 2.6102002539285825,
+    "mean_top1_l2_m_hit_only": 2.542533937967676,
+    "mean_latency_s": 0.3333581212499439
+  },
+  "per_case": [
+    {
+      "query": "the floor",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 0.9559943668900905,
+      "top1_score": -3333.176025390625,
+      "latency_s": 0.42515873499996815,
+      "num_results": 5
+    },
+    {
+      "query": "the ceiling",
+      "hit@1": true,
+      "hit@5": true,
+      "rank_of_hit": 1,
+      "top1_centroid_l2_m": 2.063770782541107,
+      "top1_score": -1666.48828125,
+      "latency_s": 0.18076277599993773,
+      "num_results": 5
+    },
+    {
+      "query": "a wall",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 2,
+      "top1_centroid_l2_m": 2.3114114177215828,
+      "top1_score": -434.5694580078125,
+      "latency_s": 0.3881685809992632,
+      "num_results": 5
+    },
+    {
+      "query": "a desk",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 3,
+      "top1_centroid_l2_m": 4.020276504663848,
+      "top1_score": -2222.064208984375,
+      "latency_s": 0.42877782300001854,
+      "num_results": 5
+    },
+    {
+      "query": "a chair",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 2,
+      "top1_centroid_l2_m": 2.2939753656451822,
+      "top1_score": -2407.2763671875,
+      "latency_s": 0.3775299190001533,
+      "num_results": 5
+    },
+    {
+      "query": "a bookshelf",
+      "hit@1": false,
+      "hit@5": true,
+      "rank_of_hit": 3,
+      "top1_centroid_l2_m": 3.6097751903442483,
+      "top1_score": -4444.3505859375,
+      "latency_s": 0.2077604579999388,
+      "num_results": 5
+    },
+    {
+      "query": "a sofa",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 3.2237747573123885,
+      "top1_score": 0.22729887068271637,
+      "latency_s": 0.17998052100028872,
+      "num_results": 5
+    },
+    {
+      "query": "a laptop",
+      "hit@1": false,
+      "hit@5": false,
+      "rank_of_hit": null,
+      "top1_centroid_l2_m": 2.4026236463102117,
+      "top1_score": -3333.19189453125,
+      "latency_s": 0.4787261569999828,
+      "num_results": 5
+    }
+  ]
+}
