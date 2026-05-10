@@ -103,9 +103,22 @@ integration → text query → ranked 3D targets]
 
 | Encoder | room0 hit@1 | room0 hit@5 | office0 hit@1 | office0 hit@5 |
 |---------|-------------|-------------|---------------|---------------|
-| SAM-dense ViT-B/16 | X% | X% | X% | X% |
-| SAM-dense ViT-L/14 | X% | X% | X% | X% |
-| LSeg (DPT) | X% | X% | X% | X% |
+| SAM-dense ViT-B/16 | 22.2% | 77.8% | 12.5% | 75.0% |
+| SAM-dense ViT-L/14 | 33.3% | 55.6% | 25.0% | 75.0% |
+| LSeg (DPT) | n/a | n/a | n/a | n/a |
+
+Notes: ViT-B/16 baseline is the 4 cm block_hash SAM-dense map from
+`benchmarks/results/20260419T_full_replica_aggregate.json` (room0) and
+`20260419T025330Z_eval_grounding.json` (office0), reconfirmed 2026-05-09.
+ViT-L/14 is the 4 cm block_hash SAM-dense map from
+`benchmarks/results/dense_encoder/` (eval run 2026-05-09). LSeg row is blocked
+on a `_DPTHead` architecture bug in `src/openvocab_tsdf/semantics/lseg_encoder.py`
+— the head is built with 768 internal channels, but the
+`lseg_minimal_e200.ckpt` checkpoint expects 256 internal channels with
+ResNet-style per-layer in-channels [256, 512, 1024, 1024] (the public
+release uses a ResNet/DPT-Hybrid backbone, not the timm ViT-B/32 backbone
+the encoder currently constructs). Fix requires re-architecting `_DPTHead`
++ swapping the backbone, deferred.
 
 ### 3.3 Throughput
 
