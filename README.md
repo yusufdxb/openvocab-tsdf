@@ -134,6 +134,33 @@ python scripts/render_comparison.py \
 | office0 / global  | 25.0 % → **37.5 %** (+12.5) | 87.5 % → 75.0 % (−12.5)    | 2.15 → **1.79** (−0.36)    |
 | **office0 / sam_dense** | 37.5 % → **37.5 %** (±0) | 75.0 % → 62.5 % (−12.5)    | 1.54 → **1.50** (−0.04)    |
 
+### Dense encoder comparison — Replica room0 + office0 (2026-05-09)
+
+Three-way head-to-head between the two SAM-dense CLIP variants (ViT-B/16
+and ViT-L/14) and the LSeg DPT-Large dense encoder. Same 4 cm
+`block_hash` map, same hand-annotated spec, same 100-frame / stride-20
+profile across all three rows.
+
+| Encoder            | room0 hit@1 | room0 hit@5 | office0 hit@1 | office0 hit@5 |
+|--------------------|-------------|-------------|---------------|---------------|
+| SAM-dense ViT-B/16 | 22.2 %      | 77.8 %      | 12.5 %        | 75.0 %        |
+| SAM-dense ViT-L/14 | **33.3 %**  | 55.6 %      | **25.0 %**    | 75.0 %        |
+| LSeg (DPT-Large)   | n/a         | n/a         | n/a           | n/a           |
+
+Sources: ViT-B/16 row from
+`benchmarks/results/20260419T_full_replica_aggregate.json` (room0) and
+`20260419T025330Z_eval_grounding.json` (office0), reconfirmed 2026-05-09.
+ViT-L/14 row from `benchmarks/results/dense_encoder/` (eval run
+2026-05-09).
+
+LSeg row is **pending an encode run, not pending a fix** — the
+architecture mismatch in `src/openvocab_tsdf/semantics/lseg_encoder.py`
+that previously blocked checkpoint loading was corrected in
+2026-05-09 (commit ports the encoder to ViT-L/16 384 + DPT-Large
+reassembly + 256-channel scratch decoder, matching
+`lseg_minimal_e200.ckpt` key-for-key with 0 missing / 0 unexpected on
+strict load). GPU encode is the next step.
+
 ### SAM-per-mask CLIP dense features (`mode: sam_dense`)
 
 ConceptFusion / Grounded-SAM-lite pipeline: MobileSAM auto-masks → CLIP on each mask crop → per-pixel feature map (mask features blended by predicted IoU; pixels outside every mask fall back to the frame-global CLIP embedding). Full-resolution dense feature maps (not patch-resize-crop), integrated per-pixel into voxels.
