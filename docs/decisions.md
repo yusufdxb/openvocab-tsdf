@@ -360,3 +360,41 @@ semantics improvements separately.
 **Status.** Dockerfile + .dockerignore committed. End-to-end build (`docker build -t openvocab-tsdf:latest .`) not exercised in this session — the base image pull alone is multi-GB.
 
 ---
+
+## 2026-05-12 — Dense-encoder phase close (17/17)
+
+**Decision.** Treat the 17-task dense-encoder plan as complete. The final
+two LSeg encode + eval runs (Task 11) landed on 2026-05-12.
+
+**Evidence.**
+
+- `outputs/replica_room0_6cm_lseg.npz` (267 MB, 1423 blocks / 137 486 feat voxels),
+  fuse 74.24 s for 100 frames on RTX 5070.
+- `outputs/replica_office0_6cm_lseg.npz` (159 MB, 718 blocks / 81 973 feat voxels),
+  fuse 74.93 s for 100 frames.
+- LSeg grounding eval room0: hit@1 = 11.1 %, hit@5 = 44.4 %, source
+  `benchmarks/results/dense_encoder/20260513T004519Z_eval_grounding.json`.
+- LSeg grounding eval office0: hit@1 = 37.5 %, hit@5 = 50.0 %, source
+  `benchmarks/results/dense_encoder/20260513T004531Z_eval_grounding.json`.
+
+**Three-way comparison (full table in README).** LSeg wins `office0 hit@1`
+at 37.5 % (best in slice). SAM-dense ViT-B/16 holds hit@5 on both scenes.
+SAM-dense ViT-L/14 wins `room0 hit@1` at 33.3 %. No single encoder wins
+on both axes for both scenes, which matches the prior 8-scene aggregate
+read that the feature stack is the ceiling on Replica.
+
+**Method caveats.** LSeg uses 6 cm voxels vs 4 cm for the SAM-dense
+configs (matching the original LSeg config and to keep VRAM headroom on
+the 12 GB RTX 5070 alongside the 3.1 GB checkpoint at ~342 M params).
+The hit@5 gap between LSeg and SAM-dense is partly attributable to the
+coarser voxel grid. Eval used CLIP ViT-B/32 / openai for the text
+encoder (matching the LSeg training text space); a temporary spec file
+without the `model:` override drives this so the eval harness reads
+`model` from the bundle metadata.
+
+**Follow-up.** Push to `origin/main`, then move on to the Replica
+multi-scene LSeg sweep or the SigLIP / DFN swap as the next semantic
+upgrade. README comparison table updated with the final numbers and
+source JSONs.
+
+---
