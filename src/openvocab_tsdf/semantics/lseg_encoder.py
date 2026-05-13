@@ -82,14 +82,10 @@ class _FeatureFusionBlock(nn.Module):
         self.resConfUnit2 = _ResidualConvUnit(channels)
         self.out_conv = nn.Conv2d(channels, channels, 1, bias=True)
 
-    def forward(
-        self, x: torch.Tensor, residual: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             if x.shape[2:] != residual.shape[2:]:
-                x = F.interpolate(
-                    x, size=residual.shape[2:], mode="bilinear", align_corners=True
-                )
+                x = F.interpolate(x, size=residual.shape[2:], mode="bilinear", align_corners=True)
             x = x + self.resConfUnit1(residual)
         x = self.resConfUnit2(x)
         x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=True)
@@ -200,8 +196,12 @@ class _DPTHead(nn.Module):
     from 256 internal channels to the 512-d CLIP feature space.
     """
 
-    def __init__(self, hooks_out_channels: tuple[int, int, int, int] = (256, 512, 1024, 1024),
-                 inner_channels: int = 256, out_channels: int = 512) -> None:
+    def __init__(
+        self,
+        hooks_out_channels: tuple[int, int, int, int] = (256, 512, 1024, 1024),
+        inner_channels: int = 256,
+        out_channels: int = 512,
+    ) -> None:
         super().__init__()
         c1, c2, c3, c4 = hooks_out_channels
         self.layer1_rn = nn.Conv2d(c1, inner_channels, 3, padding=1, bias=False)
@@ -216,9 +216,7 @@ class _DPTHead(nn.Module):
 
         self.head1 = nn.Conv2d(inner_channels, out_channels, kernel_size=1)
 
-    def forward(
-        self, features: list[torch.Tensor], input_size: tuple[int, int]
-    ) -> torch.Tensor:
+    def forward(self, features: list[torch.Tensor], input_size: tuple[int, int]) -> torch.Tensor:
         layer_1 = self.layer1_rn(features[0])
         layer_2 = self.layer2_rn(features[1])
         layer_3 = self.layer3_rn(features[2])
@@ -297,9 +295,7 @@ class LSegDPT(nn.Module):
         # Hook storage for the four backbone block activations
         self._hook_outputs: list[torch.Tensor] = [None] * 4  # type: ignore[list-item]
         for slot, block_idx in enumerate(self.HOOK_BLOCKS):
-            self.backbone.blocks[block_idx].register_forward_hook(
-                self._make_hook(slot)
-            )
+            self.backbone.blocks[block_idx].register_forward_hook(self._make_hook(slot))
 
         if ckpt_path is not None:
             self.load_lseg_checkpoint(ckpt_path, strict=strict)
@@ -307,6 +303,7 @@ class LSegDPT(nn.Module):
     def _make_hook(self, slot: int):
         def hook(_mod, _inp, out):
             self._hook_outputs[slot] = out
+
         return hook
 
     def load_lseg_checkpoint(self, ckpt_path: str | Path, strict: bool = True) -> None:
@@ -465,9 +462,7 @@ class LSegEncoder:
         t = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Resize(
-                    (self.INPUT_SIZE, self.INPUT_SIZE), antialias=True
-                ),
+                transforms.Resize((self.INPUT_SIZE, self.INPUT_SIZE), antialias=True),
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
             ]
         )
