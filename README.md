@@ -33,6 +33,12 @@ graph TD
     B --> P
 ```
 
+## TL;DR
+
+- **What:** offline-first GPU TSDF + per-voxel CLIP features for free-form 3D language grounding ("chair near the window" → ranked `(x, y, z)` with confidence), plus a ROS 2 wrapper.
+- **Headline result:** on Replica `room0` with SAM-dense CLIP features at 4 cm, **hit@1 = 55.6 %, hit@5 = 100.0 %** across a 9-query hand-annotated spec (post-fix gate, `benchmarks/results/20260416T150054Z_eval_grounding.json`). Triton fuse kernel hits **4423 FPS** at 320×240, 25 MB VRAM on RTX 5070.
+- **One-command demo (no dataset required):** `python scripts/demo_synthetic.py` builds a 3-primitive synthetic scene, fuses it, and runs a grounding query end-to-end.
+
 ## Status
 
 | Phase | State | Highlights |
@@ -164,15 +170,16 @@ python scripts/render_comparison.py \
 ### Dense encoder comparison — Replica room0 + office0 (2026-05-09)
 
 Three-way head-to-head between the two SAM-dense CLIP variants (ViT-B/16
-and ViT-L/14) and the LSeg DPT-Large dense encoder. Same 4 cm
-`block_hash` map, same hand-annotated spec, same 100-frame / stride-20
-profile across all three rows.
+and ViT-L/14) and the LSeg DPT-Large dense encoder. Same hand-annotated
+spec, same 100-frame / stride-20 profile across all three rows.
 
-| Encoder            | room0 hit@1 | room0 hit@5 | office0 hit@1 | office0 hit@5 |
-|--------------------|-------------|-------------|---------------|---------------|
-| SAM-dense ViT-B/16 | 22.2 %      | **77.8 %**  | 12.5 %        | **75.0 %**    |
-| SAM-dense ViT-L/14 | **33.3 %**  | 55.6 %      | 25.0 %        | **75.0 %**    |
-| LSeg (DPT-Large)   | 11.1 %      | 44.4 %      | **37.5 %**    | 50.0 %        |
+| Encoder            | room0 hit@1 | room0 hit@5 | room0 mean L2 (m) | office0 hit@1 | office0 hit@5 | office0 mean L2 (m) |
+|--------------------|-------------|-------------|-------------------|---------------|---------------|---------------------|
+| SAM-dense ViT-B/16 | 22.2 %      | **77.8 %**  | 2.76              | 12.5 %        | **75.0 %**    | 2.82                |
+| SAM-dense ViT-L/14 | **33.3 %**  | 55.6 %      | n/a               | 25.0 %        | **75.0 %**    | n/a                 |
+| LSeg (DPT-Large)*  | 11.1 %      | 44.4 %      | **3.30** (n=9)    | **37.5 %**    | 50.0 %        | **2.85** (n=8)      |
+
+\* **Caveat:** LSeg ran at 6 cm voxels, SAM-dense rows at 4 cm `block_hash`. Not strictly apples-to-apples; the coarser LSeg map contributes to the hit@5 spread.
 
 Sources: ViT-B/16 row from
 `benchmarks/results/20260419T_full_replica_aggregate.json` (room0) and
@@ -265,12 +272,24 @@ Reproduce the sweep:
 ./scripts/eval_all_replica.sh
 ```
 
-### ScanNet v2 cross-scene eval (planned)
+### ScanNet v2 cross-scene eval (deferred)
 
-Infrastructure is in place to run the same `block_hash` + `sam_dense` pipeline on
-ScanNet v2 scenes with proper semantic ground truth (NYU40 per-instance 3D bboxes
-extracted from the annotated mesh). This is the main remaining credibility piece —
-ScanNet provides real semantic labels, not hand-annotated bboxes from mesh inspection.
+**Decision (2026-04-24): not pursuing ScanNet for this project.** The
+Replica 8-scene aggregate above (`hit@1 = 15.3 %`, `hit@5 = 44.9 %`,
+mean L2 = 3.18 m, with the per-scene spread from 0.0 % to 44.4 %
+hit@1) already establishes that the CLIP feature stack (not the
+mapping or eval pipeline) is the accuracy ceiling at room scale.
+Adding a second dataset with the same encoder would not change that
+conclusion; the experiment to run next is a stronger dense semantic
+head (LSeg / OpenSeg), which the 2026-05-09 dense-encoder table starts
+on.
+
+The infrastructure is still in the repo for anyone who wants to run it:
+`src/openvocab_tsdf/data/scannet.py` reads the standard
+color/depth/pose/intrinsic extracted format, and
+`scripts/gen_scannet_eval_specs.py` extracts per-instance 3D bounding
+boxes from a scene's `_vh_clean.aggregation.json` +
+`_vh_clean_2.ply` annotations.
 
 ```bash
 # 1. Download ScanNet data (requires signed ToU form)
@@ -285,11 +304,6 @@ python scripts/gen_scannet_eval_specs.py \
 # 3. Run the full sweep
 ./scripts/eval_all_scannet.sh --scenes scene0011_00,scene0050_00,scene0231_00
 ```
-
-The ScanNet loader (`src/openvocab_tsdf/data/scannet.py`) reads the standard
-extracted format (color/depth/pose/intrinsic directories). The eval spec generator
-(`scripts/gen_scannet_eval_specs.py`) extracts per-instance 3D bounding boxes from
-the scene's `_vh_clean.aggregation.json` + `_vh_clean_2.ply` annotations.
 
 **CLIP image encode (ViT-B/16 @ 224×224 fp16, batch 16):**
 - PyTorch: **1280 FPS**
