@@ -143,23 +143,33 @@ profile across all three rows.
 
 | Encoder            | room0 hit@1 | room0 hit@5 | office0 hit@1 | office0 hit@5 |
 |--------------------|-------------|-------------|---------------|---------------|
-| SAM-dense ViT-B/16 | 22.2 %      | 77.8 %      | 12.5 %        | 75.0 %        |
-| SAM-dense ViT-L/14 | **33.3 %**  | 55.6 %      | **25.0 %**    | 75.0 %        |
-| LSeg (DPT-Large)   | n/a         | n/a         | n/a           | n/a           |
+| SAM-dense ViT-B/16 | 22.2 %      | **77.8 %**  | 12.5 %        | **75.0 %**    |
+| SAM-dense ViT-L/14 | **33.3 %**  | 55.6 %      | 25.0 %        | **75.0 %**    |
+| LSeg (DPT-Large)   | 11.1 %      | 44.4 %      | **37.5 %**    | 50.0 %        |
 
 Sources: ViT-B/16 row from
 `benchmarks/results/20260419T_full_replica_aggregate.json` (room0) and
 `20260419T025330Z_eval_grounding.json` (office0), reconfirmed 2026-05-09.
-ViT-L/14 row from `benchmarks/results/dense_encoder/` (eval run
-2026-05-09).
+ViT-L/14 row from `benchmarks/results/dense_encoder/` eval JSONs
+`20260510T044701Z_eval_grounding.json` (room0) and
+`20260510T044713Z_eval_grounding.json` (office0), 2026-05-09.
+LSeg row from `benchmarks/results/dense_encoder/`
+`20260513T004519Z_eval_grounding.json` (room0) and
+`20260513T004531Z_eval_grounding.json` (office0), 2026-05-12.
 
-LSeg row is **pending an encode run, not pending a fix** — the
-architecture mismatch in `src/openvocab_tsdf/semantics/lseg_encoder.py`
-that previously blocked checkpoint loading was corrected in
-2026-05-09 (commit ports the encoder to ViT-L/16 384 + DPT-Large
-reassembly + 256-channel scratch decoder, matching
+The encoder mismatch that previously blocked LSeg checkpoint loading was
+corrected on 2026-05-09 (commit `f231fc5` ports the encoder to ViT-L/16
+384 + DPT-Large reassembly + 256-channel scratch decoder, matching
 `lseg_minimal_e200.ckpt` key-for-key with 0 missing / 0 unexpected on
-strict load). GPU encode is the next step.
+strict load). The 2026-05-12 encode runs (74 s fuse for 100 frames per
+scene on RTX 5070, 12 GB) close the 17-task dense-encoder plan at 17/17.
+
+Headline takeaway: no single encoder wins both scenes. LSeg lifts
+`office0 hit@1` to **37.5 %** (the strongest hit@1 in this slice), while
+SAM-dense ViT-B/16 still holds `hit@5` on both scenes. ViT-L/14 wins
+`room0 hit@1` (33.3 %) and trails on hit@5. The 6 cm LSeg map is
+coarser (1423 vs 4cm block_hash) which contributes to the hit@5
+spread.
 
 ### SAM-per-mask CLIP dense features (`mode: sam_dense`)
 
