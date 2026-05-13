@@ -6,6 +6,33 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 
 > *"chair near the window"* → `(x, y, z), bbox, score, supporting frames`
 
+### Pipeline overview
+
+```mermaid
+graph LR
+    A[RGB-D input] --> B[GPU TSDF<br/>reference, triton,<br/>sparse_feature, block_hash]
+    B --> C[CLIP per-voxel features<br/>SAM-dense or LSeg]
+    C --> D[Text grounding<br/>open-vocab query to 3D location]
+    D --> E[ROS 2 node<br/>optional consumer]
+```
+
+### Backend taxonomy
+
+All four mapping backends share the `TSDFVolume` protocol. They differ in geometry layout, feature layout, and the scale envelope they hold up under.
+
+```mermaid
+graph TD
+    P[TSDFVolume protocol]
+    R[reference<br/>dense PyTorch baseline,<br/>correctness reference]
+    T[triton<br/>custom Triton kernel,<br/>4.4 kFPS at 320x240, 25 MB]
+    S[sparse_feature<br/>dense geometry,<br/>voxel-slot sparse features]
+    B[block_hash<br/>8^3-voxel block-hash geometry,<br/>scales past ~50 m^3 in VRAM]
+    R --> P
+    T --> P
+    S --> P
+    B --> P
+```
+
 ## Status
 
 | Phase | State | Highlights |
