@@ -101,24 +101,41 @@ integration → text query → ranked 3D targets]
 
 [Table 2: Three-way encoder comparison on Replica room0 + office0]
 
-| Encoder | room0 hit@1 | room0 hit@5 | office0 hit@1 | office0 hit@5 |
-|---------|-------------|-------------|---------------|---------------|
-| SAM-dense ViT-B/16 | 22.2% | 77.8% | 12.5% | 75.0% |
-| SAM-dense ViT-L/14 | 33.3% | 55.6% | 25.0% | 75.0% |
-| LSeg (DPT) | n/a | n/a | n/a | n/a |
+| Encoder | voxel_size | room0 hit@1 | room0 hit@5 | office0 hit@1 | office0 hit@5 |
+|---------|------------|-------------|-------------|---------------|---------------|
+| SAM-dense ViT-B/16 (mismatched grid vs LSeg) | 4 cm | 22.2% | 77.8% | 12.5% | 75.0% |
+| SAM-dense ViT-L/14 (mismatched grid vs LSeg) | 4 cm | 33.3% | 55.6% | 25.0% | 75.0% |
+| SAM-dense ViT-B/16 (matched grid, 2026-05-14) | 6 cm | 33.3% | 66.7% | 25.0% | 37.5% |
+| LSeg (DPT-Large)                              | 6 cm | 11.1% | 44.4% | 37.5% | 50.0% |
 
-Notes: ViT-B/16 baseline is the 4 cm block_hash SAM-dense map from
-`benchmarks/results/20260419T_full_replica_aggregate.json` (room0) and
-`20260419T025330Z_eval_grounding.json` (office0), reconfirmed 2026-05-09.
-ViT-L/14 is the 4 cm block_hash SAM-dense map from
-`benchmarks/results/dense_encoder/` (eval run 2026-05-09). LSeg row is blocked
-on a `_DPTHead` architecture bug in `src/openvocab_tsdf/semantics/lseg_encoder.py`
-— the head is built with 768 internal channels, but the
-`lseg_minimal_e200.ckpt` checkpoint expects 256 internal channels with
-ResNet-style per-layer in-channels [256, 512, 1024, 1024] (the public
-release uses a ResNet/DPT-Hybrid backbone, not the timm ViT-B/32 backbone
-the encoder currently constructs). Fix requires re-architecting `_DPTHead`
-+ swapping the backbone, deferred.
+**Limitations note (also see §3.2 Limitations bullet):** LSeg's 6 cm grid is
+not directly comparable to SAM-dense's 4 cm grid; the 6 cm SAM-dense
+baseline is included to support a matched comparison. The CLIP text-space
+mismatch (ViT-B/32 for LSeg vs ViT-B/16 for SAM-dense) is a separate
+limitation.
+
+Sources:
+* ViT-B/16 4 cm: `benchmarks/results/20260419T_full_replica_aggregate.json` (room0),
+  `20260419T025330Z_eval_grounding.json` (office0), reconfirmed 2026-05-09.
+* ViT-L/14 4 cm: `benchmarks/results/dense_encoder/20260510T044701Z_eval_grounding.json`
+  (room0), `20260510T044713Z_eval_grounding.json` (office0), 2026-05-09.
+* SAM-dense ViT-B/16 6 cm (new): `benchmarks/results/dense_encoder/20260514T202746Z_eval_grounding.json`
+  (room0, hit@1 = 3/9 = 33.3 %, hit@5 = 6/9 = 66.7 %, mean L2 = 3.47 m),
+  `20260514T203414Z_eval_grounding.json` (office0, hit@1 = 2/8 = 25.0 %,
+  hit@5 = 3/8 = 37.5 %, mean L2 = 2.47 m). Configs:
+  `configs/replica_room0_6cm_block_hash_sam.yaml`,
+  `configs/replica_office0_6cm_block_hash_sam.yaml`.
+* LSeg 6 cm: `benchmarks/results/dense_encoder/20260513T004519Z_eval_grounding.json`
+  (room0), `20260513T004531Z_eval_grounding.json` (office0), 2026-05-12.
+
+All rows: 100 frames, stride 20, RTX 5070, eval spec
+`eval/specs/replica_{scene}.yaml` (`min_cluster_voxels: 20`,
+`cluster_eps_vox: 2`, `top_percentile: 0.005`).
+
+The LSeg architecture-bug note from earlier outline drafts is now resolved
+(commit `f231fc5`, 2026-05-09: encoder ported to ViT-L/16 384 + DPT-Large
+reassembly + 256-channel scratch decoder, key-for-key match against
+`lseg_minimal_e200.ckpt`).
 
 ### 3.3 Throughput
 
@@ -149,6 +166,10 @@ the encoder currently constructs). Fix requires re-architecting `_DPTHead`
   rendered Replica scenes underperform real-world data
 - LSeg uses an archived checkpoint (Intel ISL); no fine-tuning on
   indoor scenes
+- LSeg's 6 cm grid is not directly comparable to SAM-dense's 4 cm grid;
+  the 6 cm SAM-dense baseline is included to support a matched
+  comparison. The CLIP text-space mismatch (ViT-B/32 for LSeg vs
+  ViT-B/16 for SAM-dense) is a separate limitation.
 - Near-surface gate at band=0.5 is a heuristic — optimal value is
   scene-dependent
 - Block-hash query path densifies for scoring, which OOMs at warehouse

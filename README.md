@@ -173,20 +173,26 @@ Three-way head-to-head between the two SAM-dense CLIP variants (ViT-B/16
 and ViT-L/14) and the LSeg DPT-Large dense encoder. Same hand-annotated
 spec, same 100-frame / stride-20 profile across all three rows.
 
-| Encoder            | room0 hit@1 | room0 hit@5 | room0 mean L2 (m) | office0 hit@1 | office0 hit@5 | office0 mean L2 (m) |
-|--------------------|-------------|-------------|-------------------|---------------|---------------|---------------------|
-| SAM-dense ViT-B/16 | 22.2 %      | **77.8 %**  | 2.76              | 12.5 %        | **75.0 %**    | 2.82                |
-| SAM-dense ViT-L/14 | **33.3 %**  | 55.6 %      | n/a               | 25.0 %        | **75.0 %**    | n/a                 |
-| LSeg (DPT-Large)*  | 11.1 %      | 44.4 %      | **3.30** (n=9)    | **37.5 %**    | 50.0 %        | **2.85** (n=8)      |
+| Encoder            | voxel | room0 hit@1 | room0 hit@5 | room0 mean L2 (m) | office0 hit@1 | office0 hit@5 | office0 mean L2 (m) |
+|--------------------|-------|-------------|-------------|-------------------|---------------|---------------|---------------------|
+| SAM-dense ViT-B/16 (mismatched grid)\* | 4 cm | 22.2 % | **77.8 %** | 2.76 | 12.5 % | **75.0 %** | 2.82 |
+| SAM-dense ViT-L/14 (mismatched grid)\* | 4 cm | **33.3 %** | 55.6 % | n/a | 25.0 % | **75.0 %** | n/a |
+| **SAM-dense ViT-B/16 (matched grid)**  | **6 cm** | **33.3 %** | 66.7 % | 3.47 (n=9) | 25.0 % | 37.5 % | 2.47 (n=8) |
+| LSeg (DPT-Large)                       | 6 cm | 11.1 % | 44.4 % | 3.30 (n=9) | **37.5 %** | 50.0 % | 2.85 (n=8) |
 
-\* **Caveat:** LSeg ran at 6 cm voxels, SAM-dense rows at 4 cm `block_hash`. Not strictly apples-to-apples; the coarser LSeg map contributes to the hit@5 spread.
+\* **Caveat:** The 4 cm SAM-dense rows are NOT directly comparable to the 6 cm LSeg row because the eval-spec cluster filters (`min_cluster_voxels=20`, `cluster_eps_vox=2`, `top_percentile=0.005`) operate in voxel units, so a fixed physical object dilation kernel and minimum cluster size differ between the two grids (see `docs/notes/voxel_size_audit.md`). The new 2026-05-14 matched-grid 6 cm SAM-dense ViT-B/16 row is the apples-to-apples baseline against LSeg at the same voxel size. The CLIP text-space mismatch (ViT-B/32 for LSeg vs ViT-B/16 for SAM-dense) is a separate, independent limitation.
 
-Sources: ViT-B/16 row from
+Sources: ViT-B/16 4 cm row from
 `benchmarks/results/20260419T_full_replica_aggregate.json` (room0) and
 `20260419T025330Z_eval_grounding.json` (office0), reconfirmed 2026-05-09.
-ViT-L/14 row from `benchmarks/results/dense_encoder/` eval JSONs
+ViT-L/14 4 cm row from `benchmarks/results/dense_encoder/` eval JSONs
 `20260510T044701Z_eval_grounding.json` (room0) and
 `20260510T044713Z_eval_grounding.json` (office0), 2026-05-09.
+SAM-dense ViT-B/16 6 cm row (matched grid, added 2026-05-14) from
+`benchmarks/results/dense_encoder/20260514T202746Z_eval_grounding.json`
+(room0) and `20260514T203414Z_eval_grounding.json` (office0); configs
+`configs/replica_room0_6cm_block_hash_sam.yaml` and
+`configs/replica_office0_6cm_block_hash_sam.yaml`.
 LSeg row from `benchmarks/results/dense_encoder/`
 `20260513T004519Z_eval_grounding.json` (room0) and
 `20260513T004531Z_eval_grounding.json` (office0), 2026-05-12.
@@ -201,9 +207,15 @@ scene on RTX 5070, 12 GB) close the 17-task dense-encoder plan at 17/17.
 Headline takeaway: no single encoder wins both scenes. LSeg lifts
 `office0 hit@1` to **37.5 %** (the strongest hit@1 in this slice), while
 SAM-dense ViT-B/16 still holds `hit@5` on both scenes. ViT-L/14 wins
-`room0 hit@1` (33.3 %) and trails on hit@5. The 6 cm LSeg map is
-coarser (1423 vs 4cm block_hash) which contributes to the hit@5
-spread.
+`room0 hit@1` (33.3 %) and trails on hit@5.
+
+**Matched-grid update (2026-05-14):** At the same 6 cm voxel size used
+by LSeg, SAM-dense ViT-B/16 reaches 33.3 % room0 hit@1 / 25.0 % office0
+hit@1 (vs LSeg 11.1 % / 37.5 %). The room0 ranking flips at matched grid
+(SAM beats LSeg, 33.3 % vs 11.1 % hit@1) while office0 stays in LSeg's
+favor on hit@1 (37.5 % vs 25.0 %). The 4 cm SAM-dense rows are
+preserved above for the cross-voxel comparison but are not a controlled
+baseline against LSeg.
 
 ### SAM-per-mask CLIP dense features (`mode: sam_dense`)
 
