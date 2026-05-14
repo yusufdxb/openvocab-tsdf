@@ -1,0 +1,56 @@
+# Replica office0 — 6 cm voxels, SAM-per-mask CLIP dense features, block_hash backend.
+#
+# Created 2026-05-14 for the voxel-size fairness audit. This config is the
+# matched baseline for the 6 cm LSeg run (replica_office0_6cm_lseg.yaml).
+# Only voxel_size_m and truncation_distance_m differ from the 4 cm counterpart
+# (replica_office0_4cm_block_hash_sam.yaml). All other knobs — encoder, ViT-B/16,
+# batch_size, device, dtype, grounding thresholds, dataset path — are identical.
+# bounds_min/bounds_max are also preserved from the 4 cm office0 config.
+#
+# truncation_distance_m: 0.24 = 4 * voxel_size_m (4x convention, same as the
+# LSeg 6 cm config; overrides the 4 cm convention of 0.16 = 4 * 0.04).
+
+dataset:
+  name: replica
+  root: ~/data/replica/Replica
+  scene: office0
+  max_frames: 100
+  stride: 20
+
+camera:
+  depth_scale: 6553.5
+  depth_trunc_m: 6.0
+
+mapping:
+  voxel_size_m: 0.06
+  truncation_distance_m: 0.24
+  block_size: 8
+  backend: block_hash
+  device: cuda:0
+  store_color: true
+  store_features: true
+  feature_dim: 512
+  bounds_min: [-2.5, -3.5, -1.7]
+  bounds_max: [2.9, 2.4, 2.0]
+  auto_bounds_radius_m: 5.0
+  max_weight: 32.0
+  initial_feat_capacity: 262144
+  max_feat_capacity: 8000000
+
+semantics:
+  model: ViT-B-16
+  pretrained: laion2b_s34b_b88k
+  mode: sam_dense
+  batch_size: 32
+  device: cuda:0
+  dtype: fp16
+
+grounding:
+  top_k: 5
+  score_threshold: 0.22
+  cluster_eps_vox: 2
+  min_cluster_voxels: 8
+
+logging:
+  level: INFO
+  rich_tracebacks: true
