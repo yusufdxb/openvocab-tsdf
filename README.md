@@ -197,6 +197,21 @@ LSeg row from `benchmarks/results/dense_encoder/`
 `20260513T004519Z_eval_grounding.json` (room0) and
 `20260513T004531Z_eval_grounding.json` (office0), 2026-05-12.
 
+> **Reproducibility note (2026-05-21):** The LSeg eval JSONs reference
+> spec files `/tmp/openvocab_eval_specs/replica_room0_lseg.yaml` and
+> `replica_office0_lseg.yaml`. Those files were written to a temp
+> directory, were never committed, and no longer exist on disk, so they
+> are not preserved in this repo. The "same hand-annotated spec" claim
+> above is therefore only partially verifiable: the per-case query lists
+> recorded inside the LSeg eval JSONs are byte-identical to the cases in
+> the in-repo SAM-dense specs (`eval/specs/replica_room0.yaml`, 9 queries;
+> `eval/specs/replica_office0.yaml`, 8 queries), but the GT bbox
+> coordinates, `bbox_slack_m`, and cluster-filter parameters that the LSeg
+> run actually used cannot be recovered. The LSeg-vs-SAM comparison cannot
+> be fully reproduced from this repo as-is. To restore reproducibility,
+> re-run the LSeg eval against the committed `eval/specs/*.yaml` and
+> regenerate the dense-encoder JSONs.
+
 The encoder mismatch that previously blocked LSeg checkpoint loading was
 corrected on 2026-05-09 (commit `f231fc5` ports the encoder to ViT-L/16
 384 + DPT-Large reassembly + 256-channel scratch decoder, matching
