@@ -27,10 +27,18 @@ def assert_normalized(feats: torch.Tensor, atol: float = 1e-2) -> None:
 
 
 def cosine_score(query: torch.Tensor, voxel_feats: torch.Tensor) -> torch.Tensor:
-    """Cosine similarity between a (D,) query and a (..., D) voxel feature tensor.
+    """Inner product between a (D,) query and a (..., D) voxel feature tensor.
 
-    Assumes both already L2-normalized. We do **not** renormalize — that is the
-    caller's responsibility so this function stays hot and cheap.
+    NOTE on naming: this is a raw dot product, NOT true cosine similarity.
+    The query text embedding is L2-normalized, but per-voxel features are a
+    weighted mean of per-frame/per-pixel unit vectors and are therefore
+    generally NOT unit norm (a weighted mean of unit vectors has norm <= 1).
+    We deliberately do not renormalize the voxel features: voxels observed
+    consistently across frames keep a larger magnitude, which acts as a soft
+    observation-confidence weight. Because grounding uses a per-scene
+    `top_percentile` rank cutoff, the absolute magnitude does not change the
+    ranking, but downstream code should not treat these scores as bounded in
+    [-1, 1]. Kept as `cosine_score` for backward compatibility.
     """
     if query.shape[-1] != voxel_feats.shape[-1]:
         raise ValueError(

@@ -5,7 +5,7 @@ Subcommands:
   fuse        — ingest a dataset, build a TSDF, save mesh
   encode      — run the VLM encoder over a dataset, cache features
   ground      — text query over a built map
-  bench       — run named benchmarks and emit JSON
+  bench       — placeholder; named benchmarks are standalone scripts in benchmarks/
 """
 
 from __future__ import annotations
@@ -150,7 +150,18 @@ def bench(
     name: str = typer.Argument(..., help="benchmark name, e.g. 'tsdf_fuse'"),
     config: Path = typer.Option(..., "--config", "-c"),
 ) -> None:
-    """Run a named benchmark and write a JSON result. [Phase 4]"""
+    """Run a named benchmark and write a JSON result.
+
+    Not wired into the CLI. The named benchmarks live as standalone
+    scripts under `benchmarks/` and write JSON to `benchmarks/results/`.
+    Run them directly, for example `python benchmarks/bench_tsdf_fuse.py`.
+    """
+    console.print(
+        f"[yellow]`bench` is not wired into the CLI.[/yellow] "
+        f"Run the standalone script instead, e.g. "
+        f"[bold]python benchmarks/bench_{name}.py[/bold] "
+        f"(see the benchmarks/ directory for available names)."
+    )
     raise typer.Exit(code=2)
 
 

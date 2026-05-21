@@ -5,8 +5,12 @@ Output: ranked 3D targets (centroid, bbox, score, #voxels).
 
 Pipeline:
   1. Encode query text with CLIP text encoder → q ∈ ℝ^D, L2-normalized.
-  2. Score voxel features against q by inner product (cosine, features assumed
-     normalized).
+  2. Score voxel features against q by inner product. NOTE: this is a raw
+     dot product, not true cosine similarity — per-voxel features are a
+     weighted mean of unit vectors and are not renormalized (see
+     `semantics.aggregation.cosine_score`). Voxel scores are therefore not
+     bounded in [-1, 1]; ranking relies on the per-scene `top_percentile`
+     cutoff, which is invariant to that.
   3. Mask by (weight >= min_weight) and (score >= score_threshold).
   4. Connected-component clustering in voxel space with a Chebyshev radius.
   5. For each cluster: centroid, bbox, mean score, voxel count.

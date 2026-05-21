@@ -29,6 +29,14 @@ class CameraConfig(BaseModel):
 class MappingConfig(BaseModel):
     voxel_size_m: float = 0.02
     truncation_distance_m: float = 0.1
+    # NOTE: `hash_capacity` and `block_size` are NOT consumed by any backend.
+    # The block_hash backend uses a fixed module-level `BLOCK = 8` constant
+    # (block_hash.BLOCK) and grows its pool from `initial_feat_capacity` up
+    # to `max_feat_capacity`. These two keys are kept only so existing YAML
+    # configs that still set them validate without error; changing them in a
+    # config file has no effect. Use `initial_feat_capacity` /
+    # `max_feat_capacity` for the pool, and edit `block_hash.BLOCK` in code
+    # to change block size. Remove these keys from configs when convenient.
     hash_capacity: int = 1 << 20
     block_size: int = 8
     # `cuda` is intentionally not listed: there is no hand-written CUDA
