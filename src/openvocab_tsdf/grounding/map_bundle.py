@@ -142,7 +142,12 @@ class MapBundle:
         return self.meta.sparse_kind
 
     def score_query(self, q: torch.Tensor, neg: torch.Tensor | None = None) -> torch.Tensor:
-        """Return a dense `(Nx, Ny, Nz)` per-voxel cosine-score volume.
+        """Return a dense `(Nx, Ny, Nz)` per-voxel score volume.
+
+        Scores are the raw inner product `feat @ q`, not true cosine
+        similarity: per-voxel features are a weighted mean of unit vectors
+        and are not renormalized (see `semantics.aggregation.cosine_score`).
+        Values are not bounded in [-1, 1].
 
         For sparse backends, unobserved voxels are filled with `-1e4` so they
         sort below any real score. The volume is materialized fresh on every
