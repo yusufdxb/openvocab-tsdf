@@ -4,7 +4,7 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
-## 2026-04-12 — TSDF + sparse voxel hashing as core, not 3DGS
+## 2026-04-12: TSDF + sparse voxel hashing as core, not 3DGS
 
 **Decision.** The geometric backbone is a GPU-resident TSDF with sparse voxel hashing. 3DGS is explicitly out of the v1 scope. If a rendering layer is added later, it is additive, not a replacement for the voxel map.
 
@@ -13,13 +13,13 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 **Alternatives considered.**
 - *Pure 3DGS.* Rejected: rendering-centric, not planner-friendly.
 - *NeRF / neural field.* Rejected: training-time cost, slower queries, same planner mismatch.
-- *Dense TSDF only (no hashing).* Rejected for v1 target of 10 m³ @ 2 cm — dense grid works at that scale but does not scale past it, and hashing is the harder, more differentiating implementation.
+- *Dense TSDF only (no hashing).* Rejected for v1 target of 10 m³ @ 2 cm, dense grid works at that scale but does not scale past it, and hashing is the harder, more differentiating implementation.
 
 **Reversal triggers.** If patch/region-level CLIP aggregation proves insufficient even at dense voxel granularity, a neural radiance / feature field might re-enter the scope. Not before.
 
 ---
 
-## 2026-04-12 — Custom CUDA is in scope and welcome
+## 2026-04-12: Custom CUDA is in scope and welcome
 
 **Decision.** Hot-path integration and aggregation kernels are written in custom CUDA. A slower PyTorch reference implementation is maintained for parity testing.
 
@@ -32,7 +32,7 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
-## 2026-04-12 — OpenCLIP ViT-B/16 as baseline VLM
+## 2026-04-12: OpenCLIP ViT-B/16 as baseline VLM
 
 **Decision.** Default open-vocab encoder is OpenCLIP ViT-B/16, fp16, frozen weights. ViT-L/14 available as a quality-mode switch. Dense segmentation-style encoders (LSeg / OpenSeg) and SAM-based mask features are Phase 2b experiments.
 
@@ -42,17 +42,17 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
-## 2026-04-12 — Python 3.10 + uv, PyTorch 2.11 + CUDA 12.8
+## 2026-04-12: Python 3.10 + uv, PyTorch 2.11 + CUDA 12.8
 
 **Decision.** Environment management via `uv`. Python 3.10 (system default; reproducible across mewtwo and CI). PyTorch 2.11.0+cu128 (already installed, works on RTX 5070 sm_120).
 
-**Rationale.** RTX 5070 is Blackwell sm_120 — many libraries do not yet ship wheels for it. The installed PyTorch build works; changing Python or CUDA versions risks losing that. `uv` is faster and less surprising than conda or poetry for a pure-Python project that shells out to a CMake-built CUDA extension.
+**Rationale.** RTX 5070 is Blackwell sm_120, many libraries do not yet ship wheels for it. The installed PyTorch build works; changing Python or CUDA versions risks losing that. `uv` is faster and less surprising than conda or poetry for a pure-Python project that shells out to a CMake-built CUDA extension.
 
 **Alternatives considered.** conda (slower, heavier), poetry (slower resolver), system pip (less reproducible).
 
 ---
 
-## 2026-04-13 — Phase 4: TensorRT CLIP encoder as opt-in fast path
+## 2026-04-13: Phase 4: TensorRT CLIP encoder as opt-in fast path
 
 **Decision.** Add a TensorRT-backed image encoder that serves the same (N, D) L2-normalized embeddings as the PyTorch reference. ONNX is exported from the OpenCLIP visual tower with the legacy tracing exporter (static batch), and a TRT fp16 engine is built on first call. The PyTorch encoder remains the reference.
 
@@ -67,22 +67,22 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
-## 2026-04-13 — Scoring refinements: scene-mean subtract + negative prompt
+## 2026-04-13: Scoring refinements: scene-mean subtract + negative prompt
 
 **Decision.** `rank_query` grows two optional refinements that stack: (a) `scene_mean_subtract` subtracts the mean cosine score over observed surface voxels before thresholding, and (b) `neg_text_embedding` subtracts the cosine score of a negative-prompt vector (relative-prompt delta). Both default off.
 
 **When these help.** CLIP has a broad, scene-dependent similarity bias: many voxels score around a per-scene baseline. Mean subtraction isolates voxels that are *unusually* similar to the query, and negative prompts isolate specific adjectives from their category (e.g., "a red chair" vs "a chair"). On cluttered real-data maps these corrections are usually net positive.
 
-**Observed on synthetic.** On the 3-object rendered scene used in tests, with 0.1 m bbox slack: plain global features already hit@1 = 33 % / hit@5 = 100 %. Adding `scene_mean_subtract` drops to hit@1 = 0 % / hit@5 = 67 % because the three objects are approximately equi-baseline for CLIP — subtracting the mean hurts rather than helps. So both flags default off. Turn them on when CLIP's per-voxel score histogram is unimodal with a heavy mass near the query cosine, which is the typical real-data pattern.
+**Observed on synthetic.** On the 3-object rendered scene used in tests, with 0.1 m bbox slack: plain global features already hit@1 = 33 % / hit@5 = 100 %. Adding `scene_mean_subtract` drops to hit@1 = 0 % / hit@5 = 67 % because the three objects are approximately equi-baseline for CLIP, subtracting the mean hurts rather than helps. So both flags default off. Turn them on when CLIP's per-voxel score histogram is unimodal with a heavy mass near the query cosine, which is the typical real-data pattern.
 
 ---
 
-## 2026-04-13 — Phase 2b: patch features land with MaskCLIP trick + near-surface feature gating
+## 2026-04-13: Phase 2b: patch features land with MaskCLIP trick + near-surface feature gating
 
 **Decision.** Patch-feature mode (`semantics.mode: patch`) now lifts CLIP per-patch tokens into voxels via (a) the MaskCLIP-style last-block attention bypass, (b) per-voxel patch lookup using the encoder's preprocess mapping (resize-shortest-edge + center-crop), and (c) a near-surface feature aggregation gate (features only accumulate on voxels whose normalized TSDF is in `[-1, 1]`). Rationale:
 
 - **MaskCLIP trick.** Standard CLIP ViT mixes all tokens in its final self-attention, so patch tokens lose spatial locality. MaskCLIP (Zhou et al., 2022) observes that replacing the last block's attention with its value-only projection restores per-patch spatial meaning. We apply that only in the last transformer block and leave earlier blocks untouched.
-- **Near-surface feature gate.** Before this change, features were accumulated on every voxel within the TSDF truncation band — including free-space voxels *in front of* a surface. Those voxels would steal the features of whatever eventually occluded the ray, producing spurious hotspots. The new gate restricts feature accumulation to voxels whose `|tsdf|` is within the truncation band (i.e., the object's surface shell).
+- **Near-surface feature gate.** Before this change, features were accumulated on every voxel within the TSDF truncation band, including free-space voxels *in front of* a surface. Those voxels would steal the features of whatever eventually occluded the ray, producing spurious hotspots. The new gate restricts feature accumulation to voxels whose `|tsdf|` is within the truncation band (i.e., the object's surface shell).
 - **Surface-only querying.** `rank_query` gains `surface_only: bool = True` + `surface_tsdf_abs_max: float = 0.5` so grounding is evaluated only on the surface shell. This matches the semantics of how features were written.
 
 **Known limitation.** On the synthetic ray-traced scene used for tests (3 untextured primitives on a black background), patch localization is still weak: natural-image CLIP is out-of-distribution on that content, and the synthetic rendering does not exercise realistic patch statistics. Real-data validation (Replica, ScanNet) is the proper test. The integration test therefore only asserts that patch mode runs end-to-end and produces non-empty clusters for each query; spatial-accuracy gating moves to the real-dataset eval.
@@ -91,7 +91,7 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
-## 2026-04-12 — Global CLIP features in v1; spatial localization is coarse and that is honest
+## 2026-04-12: Global CLIP features in v1; spatial localization is coarse and that is honest
 
 **Decision.** v1 uses a single global CLIP embedding per frame, pooled per voxel by weighted mean. This delivers a working open-vocab pipeline end-to-end but its spatial localization quality is bounded by how much information a single per-frame embedding can carry about *where in the frame* a concept sits.
 
@@ -108,11 +108,11 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ---
 
-## 2026-04-12 — Triton for the first "custom kernel" backend; native CUDA/CMake deferred
+## 2026-04-12: Triton for the first "custom kernel" backend; native CUDA/CMake deferred
 
 **Decision.** The first fast mapping backend is written in **Triton**, not hand-written CUDA+CMake. Native CUDA is deferred to Phase 4 (optional) when we either (a) install CUDA 12.8 toolkit or (b) justify the additional complexity with a measurable gap Triton cannot close.
 
-**Rationale.** The system nvcc is 11.5 and cannot target the RTX 5070's Blackwell `sm_120` compute capability — native CUDA builds would require a toolkit install. Triton 3.6 ships with PyTorch 2.11 and already supports `sm_120` via the bundled build, so the kernel path works today with no system changes. Triton is also the idiomatic choice for new GPU work at this scale in 2025/2026; hand-written `.cu` is still valuable but is a second-order optimization unless Triton blocks us.
+**Rationale.** The system nvcc is 11.5 and cannot target the RTX 5070's Blackwell `sm_120` compute capability, native CUDA builds would require a toolkit install. Triton 3.6 ships with PyTorch 2.11 and already supports `sm_120` via the bundled build, so the kernel path works today with no system changes. Triton is also the idiomatic choice for new GPU work at this scale in 2025/2026; hand-written `.cu` is still valuable but is a second-order optimization unless Triton blocks us.
 
 **What this does NOT change.**
 - The reference PyTorch implementation remains the correctness oracle.
@@ -120,21 +120,21 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 - Every benchmark claim still requires a JSON file in `benchmarks/results/`.
 - The "custom GPU kernel" framing for portfolio purposes is accurate: Triton kernels are real kernels with explicit memory layout, block structure, and masking.
 
-**Reversal triggers.** (1) Install CUDA 12.8 toolkit and re-evaluate if we need handwritten kernels for sparse voxel hashing that Triton cannot express cleanly. (2) Triton generates poor code for a specific kernel — drop down to CUDA for that one kernel only.
+**Reversal triggers.** (1) Install CUDA 12.8 toolkit and re-evaluate if we need handwritten kernels for sparse voxel hashing that Triton cannot express cleanly. (2) Triton generates poor code for a specific kernel, drop down to CUDA for that one kernel only.
 
 ---
 
-## 2026-04-12 — No SLAM; consume external poses
+## 2026-04-12: No SLAM; consume external poses
 
 **Decision.** The pipeline consumes camera poses from dataset metadata, recorded bags, or an external localization stack. We do not build or embed a SLAM component.
 
 **Rationale.** SLAM is an entire project of its own. Grounding quality is bounded by pose quality; we keep that variable external and auditable.
 
-**Alternatives considered.** Integrating ORB-SLAM3 or a learned VO — rejected for scope.
+**Alternatives considered.** Integrating ORB-SLAM3 or a learned VO, rejected for scope.
 
 ---
 
-## 2026-04-13 — block_hash save format: separate dispatch via `sparse_kind`
+## 2026-04-13: block_hash save format: separate dispatch via `sparse_kind`
 
 **Decision.** `encode_and_fuse` now writes three distinct npz layouts, selected by a `sparse_kind` string field at load time: `dense` (ReferenceTSDF, legacy "sparse=False"), `voxel_slot` (SparseFeatureTSDF, legacy "sparse=True" with a dense `voxel_slot[Nx,Ny,Nz]` lookup), and `block_hash` (BlockHashTSDF, with a `block_slot[Nbx,Nby,Nbz]` + block-pool structure and a double indirection through `feat_voxel_slot[NumBlocks, 512]` → `feat_pool[NumFeatVoxels, D]`). All three downstream loaders (`pipeline.ground_text`, `eval/eval_grounding.py`, `viz/heatmap.py`) dispatch on `sparse_kind`.
 
@@ -142,7 +142,7 @@ The old `sparse: bool` key stays alongside for back-compat with maps saved befor
 
 **Rationale.** Until this commit, `encode_and_fuse`'s save path only knew two layouts and the block_hash backend could not produce a runnable npz, so the combined backend (block-hash geometry + per-voxel sparse features) was benchmark-only: no Replica hit@1 numbers, no eval. Wiring the save format is the step that converts "benchmark result" into "usable system at warehouse scale." `sparse_kind` was chosen over bumping `sparse` to an enum-coded int because string keys read well in an npz's `.files` list during debugging, and npz is forgiving of unused keys so old readers keep working.
 
-**Scatter helpers live next to the format.** `mapping/block_hash.py` exposes `densify_block_pool` (scatter a scalar or channel pool into a dense `(Nx, Ny, Nz)` at room scale) and `scatter_feat_pool_values` (scatter per-feat-voxel scalars — usually `feat_pool @ query` — into a dense `(Nx, Ny, Nz)` score tensor via the double indirection, without ever materialising the 4-D feature volume). The helpers are module-level so the three loaders can reuse them without holding a live backend instance.
+**Scatter helpers live next to the format.** `mapping/block_hash.py` exposes `densify_block_pool` (scatter a scalar or channel pool into a dense `(Nx, Ny, Nz)` at room scale) and `scatter_feat_pool_values` (scatter per-feat-voxel scalars, usually `feat_pool @ query`: into a dense `(Nx, Ny, Nz)` score tensor via the double indirection, without ever materialising the 4-D feature volume). The helpers are module-level so the three loaders can reuse them without holding a live backend instance.
 
 **Verified.** `configs/replica_room0_4cm_block_hash_sam.yaml` end-to-end: 100 frames, 4055 blocks (39.6 MB geom), 1.68M feat voxels (3.3 GB features compressed to 1.8 GB on disk). Eval on the hand-annotated room0 spec: hit@1 = 55.6 %, matching the 6 cm SAM baseline within ±1 pp as the success criterion required. Round-trip test in `tests/unit/test_mapping_block_hash_features.py` asserts metadata completeness, densified-weight parity with the in-memory `_densify`, and per-query score parity across all basis queries on every observed voxel.
 
@@ -150,11 +150,11 @@ The old `sparse: bool` key stays alongside for back-compat with maps saved befor
 
 ---
 
-## 2026-04-13 — Chunked per-voxel feature merge in BlockHashTSDF.integrate
+## 2026-04-13: Chunked per-voxel feature merge in BlockHashTSDF.integrate
 
 **Decision.** `BlockHashTSDF.integrate`'s per-voxel feature update processes `idx_flat` in `CHUNK = 32_768`-sized slices instead of all at once.
 
-**Observed incident.** At 4 cm voxels with `sam_dense` features on the 100-frame Replica room0 sweep, the single-shot path `(f_old * w + feat) / (w + 1)` allocated ≈ 3 × (N, 512) fp32 temporaries where N ≈ 465 k near-surface voxels in some frames — ~2.8 GiB of intermediates. OOM'd at frame 25/100 on a 12 GB card.
+**Observed incident.** At 4 cm voxels with `sam_dense` features on the 100-frame Replica room0 sweep, the single-shot path `(f_old * w + feat) / (w + 1)` allocated ≈ 3 × (N, 512) fp32 temporaries where N ≈ 465 k near-surface voxels in some frames, ~2.8 GiB of intermediates. OOM'd at frame 25/100 on a 12 GB card.
 
 **Fix.** Slice the merge into CHUNK rows at a time after feature-slot allocation. Peak per-chunk alloc is ~200 MiB, well below the pool's steady-state footprint. No behavioural change: `index_copy_` is an in-place write per slice, and every slice touches a disjoint set of pool rows because `fslot_long` is per-voxel (no aliasing across chunks).
 
@@ -162,22 +162,22 @@ The old `sparse: bool` key stays alongside for back-compat with maps saved befor
 
 ---
 
-## 2026-04-13 — TensorRT MobileSAM image encoder: fp32 default, fp16 opt-in
+## 2026-04-13: TensorRT MobileSAM image encoder: fp32 default, fp16 opt-in
 
 **Decision.** Add a TensorRT-backed MobileSAM image encoder (`src/openvocab_tsdf/semantics/trt_sam.py`), drop-in replacement for `sam.image_encoder(x)`, toggled via `SAMDenseConfig.image_encoder_backend: {pytorch, tensorrt}`. Default precision is **fp32**, not fp16. fp16 is a separate opt-in via `TRTSamConfig.fp16 = True` / `SAMDenseConfig.trt_fp16 = True`.
 
-**Why fp32 default — the key finding.** The initial fp16 engine passed cosine > 0.98 on random-input image_encoder parity (the naive smoke test). On real Replica frames through the full `SAMDenseFeatureExtractor.extract` pipeline, fp16 output disagreed with PyTorch fp32 at mean cosine 0.44 (min 0.28). Running the quality sweep with fp16 TRT dropped `room0` grounding hit@1 from 55.6 % → 22.2 % (−33.3 pp) and hit@5 from 88.9 % → 44.4 %, far past the plan's ±1 pp tolerance. Root cause: MobileSAM is not a plain feature extractor — its embedding drives a prompt-conditioned mask decoder, and tiny fp16 perturbations in the embedding shift auto-generated mask boundaries, which cascades into different CLIP-per-mask crops and therefore different per-voxel features.
+**Why fp32 default, the key finding.** The initial fp16 engine passed cosine > 0.98 on random-input image_encoder parity (the naive smoke test). On real Replica frames through the full `SAMDenseFeatureExtractor.extract` pipeline, fp16 output disagreed with PyTorch fp32 at mean cosine 0.44 (min 0.28). Running the quality sweep with fp16 TRT dropped `room0` grounding hit@1 from 55.6 % → 22.2 % (−33.3 pp) and hit@5 from 88.9 % → 44.4 %, far past the plan's ±1 pp tolerance. Root cause: MobileSAM is not a plain feature extractor, its embedding drives a prompt-conditioned mask decoder, and tiny fp16 perturbations in the embedding shift auto-generated mask boundaries, which cascades into different CLIP-per-mask crops and therefore different per-voxel features.
 
 fp32 eliminates that: TRT fp32 vs PyTorch fp32 on the same real frame through the same pipeline gives mean cosine 0.9995 (end-to-end dense feature map, not just encoder output). Grounding matches PyTorch within the ±1 pp budget. Cost is that the fp16 speedup (2.74×) collapses to ~10 %; fp32 is what makes the TRT path correctness-preserving.
 
-**Measured perf.** RTX 5070 (12 GB), static batch 1, 1024×1024 input (the only size MobileSAM's TinyViT accepts — positional-embedding shapes are baked in):
+**Measured perf.** RTX 5070 (12 GB), static batch 1, 1024×1024 input (the only size MobileSAM's TinyViT accepts, positional-embedding shapes are baked in):
 
 | path | PyTorch fp32 | TRT fp32 (default) | TRT fp16 (opt-in) |
 |---|---|---|---|
-| image_encoder forward alone | — | 147 FPS, 6.8 ms | 366 FPS, 2.7 ms |
+| image_encoder forward alone |, | 147 FPS, 6.8 ms | 366 FPS, 2.7 ms |
 | (baseline) PyTorch fp16 image_encoder | 133 FPS, 7.5 ms | | |
-| encode wall-clock, room0 384/pps12 | ~180 s / 100 frames | 179 s (sweep) | — |
-| encode wall-clock, room0 512/pps16 | ~265 s / 100 frames | 265 s (sweep) | — |
+| encode wall-clock, room0 384/pps12 | ~180 s / 100 frames | 179 s (sweep) |, |
+| encode wall-clock, room0 512/pps16 | ~265 s / 100 frames | 265 s (sweep) |, |
 | `extract` @ shortest_edge=384, end-to-end | 1.39 FPS, 717 ms | ~1.5 FPS (full sweep) | 4.05 FPS, 247 ms |
 | `extract` @ shortest_edge=512, end-to-end | 1.29 FPS, 778 ms | ~1.4 FPS (full sweep) | 4.04 FPS, 248 ms |
 | room0 384/pps12 hit@1 / hit@5 | 55.6 % / 88.9 % | **55.6 % / 88.9 %** | 22.2 % / 44.4 % (broken) |
@@ -185,21 +185,21 @@ fp32 eliminates that: TRT fp32 vs PyTorch fp32 on the same real frame through th
 | office0 384/pps12 hit@1 / hit@5 | 37.5 % / 75.0 % | **37.5 % / 75.0 %** | 50.0 % / 50.0 % (different-different) |
 | office0 512/pps16 hit@1 / hit@5 | 50.0 % / 75.0 % | **37.5 % / 75.0 %** | 50.0 % / 50.0 % (different-different) |
 
-**fp32 parity summary.** 31 out of 32 per-query hit@1 / hit@5 flags match PyTorch exactly. The single divergence is the "a wall" query on office0 at 512/pps16 — a borderline case where office0's wall bbox spec is ambiguous (walls are everywhere); a ~0.1 m cluster-centroid shift flips the bbox test. hit@5 is still identical. No other per-query flag flips in any other scene/variant. This is the realistic ceiling for a TRT/PyTorch numerical pipeline where the downstream mask generator has IoU thresholds — the ±1 pp aggregate criterion lands on 3/4 configs exactly and one-query-off on the fourth.
+**fp32 parity summary.** 31 out of 32 per-query hit@1 / hit@5 flags match PyTorch exactly. The single divergence is the "a wall" query on office0 at 512/pps16, a borderline case where office0's wall bbox spec is ambiguous (walls are everywhere); a ~0.1 m cluster-centroid shift flips the bbox test. hit@5 is still identical. No other per-query flag flips in any other scene/variant. This is the realistic ceiling for a TRT/PyTorch numerical pipeline where the downstream mask generator has IoU thresholds, the ±1 pp aggregate criterion lands on 3/4 configs exactly and one-query-off on the fourth.
 
 The fp16 column is kept available because the speedup is real and some downstream uses tolerate the quality drop (e.g., live-mapping preview at 3+ Hz where the grounding signal is a visual sanity check, not the authoritative ranking). Callers opt in by setting `trt_fp16=True`.
 
-**`TensorRTSamEncoder` inherits `nn.Module`.** `nn.Module.__setattr__` enforces that attributes previously registered as child modules can only be reassigned to another `nn.Module` (or `None`); since we swap `sam.image_encoder` after construction, the wrapper must also be an `nn.Module`. The engine and IO tensors stay as plain attributes so `.to()` / `.train() / .eval()` are effectively no-ops — the engine is pinned to the device it was built on.
+**`TensorRTSamEncoder` inherits `nn.Module`.** `nn.Module.__setattr__` enforces that attributes previously registered as child modules can only be reassigned to another `nn.Module` (or `None`); since we swap `sam.image_encoder` after construction, the wrapper must also be an `nn.Module`. The engine and IO tensors stay as plain attributes so `.to()` / `.train() / .eval()` are effectively no-ops, the engine is pinned to the device it was built on.
 
-**Why static batch 1.** SAM is called once per image inside `SamAutomaticMaskGenerator` — there is no frame-level batching on the public API. A static-batch-1 engine uses the smallest kernel plans TRT can pick and avoids dynamic-shape dispatch overhead.
+**Why static batch 1.** SAM is called once per image inside `SamAutomaticMaskGenerator`: there is no frame-level batching on the public API. A static-batch-1 engine uses the smallest kernel plans TRT can pick and avoids dynamic-shape dispatch overhead.
 
-**Why the random-input parity test was misleading.** Random-noise inputs cause SAM's auto-mask generator to short-circuit (no meaningful segments), so the downstream mask-dependent path doesn't exercise the fp16 sensitivity. The encoder output's raw fp16↔fp32 cosine is still > 0.98, which is a legitimate bound on the raw embedding — just not on the end-to-end pipeline. The integration truth test is `scripts/sam_quality_sweep.py` on real data, which is now what is actually being used to gate the TRT default.
+**Why the random-input parity test was misleading.** Random-noise inputs cause SAM's auto-mask generator to short-circuit (no meaningful segments), so the downstream mask-dependent path doesn't exercise the fp16 sensitivity. The encoder output's raw fp16↔fp32 cosine is still > 0.98, which is a legitimate bound on the raw embedding, just not on the end-to-end pipeline. The integration truth test is `scripts/sam_quality_sweep.py` on real data, which is now what is actually being used to gate the TRT default.
 
-**Reversal triggers.** (1) Rewriting MobileSAM's layernorm / GELU to opset-17 `INormalizationLayer` / `Gelu` recovers fp16 parity on real images — if someone proves that, fp16 can become the default. (2) Someone builds a mask-free single-pass dense encoder (e.g., MaskCLIP + LSeg) where fp16 perturbations don't change auto-mask boundaries — then fp16 + TRT is lossless by construction. (3) TRT engine builds become a portability burden across sm targets.
+**Reversal triggers.** (1) Rewriting MobileSAM's layernorm / GELU to opset-17 `INormalizationLayer` / `Gelu` recovers fp16 parity on real images, if someone proves that, fp16 can become the default. (2) Someone builds a mask-free single-pass dense encoder (e.g., MaskCLIP + LSeg) where fp16 perturbations don't change auto-mask boundaries, then fp16 + TRT is lossless by construction. (3) TRT engine builds become a portability burden across sm targets.
 
 ---
 
-## 2026-04-16 — Near-surface feature gate: configurable band, not the tautological `<= 1.0`
+## 2026-04-16: Near-surface feature gate: configurable band, not the tautological `<= 1.0`
 
 **Decision.** All three feature-storing TSDF backends (`ReferenceTSDF`,
 `SparseFeatureTSDF`, `BlockHashTSDF`) gate per-frame feature accumulation
@@ -217,7 +217,7 @@ eventually hit, which is exactly the failure mode the gate was supposed
 to prevent.
 
 **Why 0.5 by default.** Symmetric with the surface-only filter on the
-query side (`rank_query`'s `surface_tsdf_abs_max=0.5`) — features are
+query side (`rank_query`'s `surface_tsdf_abs_max=0.5`), features are
 written and queried on the same shell. Setting `near_surface_band=1.0`
 restores the broken legacy behavior as an escape hatch.
 
@@ -237,7 +237,7 @@ tautological gate.
 
 ---
 
-## 2026-04-16 — `MapBundle`: shared loader for the three saved-map layouts
+## 2026-04-16: `MapBundle`: shared loader for the three saved-map layouts
 
 **Decision.** A new module `grounding/map_bundle.py` exposes `MapBundle`,
 which loads any of the three saved-map layouts (`dense`, `voxel_slot`,
@@ -259,12 +259,12 @@ work; refactoring them onto `MapBundle` is mechanical follow-up.
 also keeps the densified `tsdf` and `weight` volumes in VRAM. At room
 scale this is fine; warehouse scale will hit the same load-side
 densification ceiling documented in
-`mapping/block_hash.densify_block_pool` — addressed in a separate
+`mapping/block_hash.densify_block_pool`: addressed in a separate
 follow-up.
 
 ---
 
-## 2026-04-19 — Replica 8-scene aggregate as the honest ScanNet substitute
+## 2026-04-19: Replica 8-scene aggregate as the honest ScanNet substitute
 
 **Decision.** Ship the Replica 8-scene aggregate result, even though it
 underperforms the optimistic design target and materially weakens the
@@ -277,14 +277,14 @@ stride 20 profile was evaluated on the eight NICE-SLAM Replica scenes
 available on disk (`room0`, `room1`, `room2`, `office0`, `office1`,
 `office2`, `office3`, `office4`). The per-scene JSONs are:
 
-- `20260419T025918Z_eval_grounding.json` — room0
-- `20260419T022432Z_eval_grounding.json` — room1
-- `20260419T023154Z_eval_grounding.json` — room2
-- `20260419T025330Z_eval_grounding.json` — office0
-- `20260419T023653Z_eval_grounding.json` — office1
-- `20260419T024224Z_eval_grounding.json` — office2
-- `20260419T025609Z_eval_grounding.json` — office3
-- `20260419T025845Z_eval_grounding.json` — office4
+- `20260419T025918Z_eval_grounding.json`: room0
+- `20260419T022432Z_eval_grounding.json`: room1
+- `20260419T023154Z_eval_grounding.json`: room2
+- `20260419T025330Z_eval_grounding.json`: office0
+- `20260419T023653Z_eval_grounding.json`: office1
+- `20260419T024224Z_eval_grounding.json`: office2
+- `20260419T025609Z_eval_grounding.json`: office3
+- `20260419T025845Z_eval_grounding.json`: office4
 
 Unweighted aggregate across scenes:
 
@@ -325,43 +325,43 @@ semantics improvements separately.
 
 ---
 
-## 2026-04-23 — ViT-L/14 SAM-dense encoder upgrade
+## 2026-04-23: ViT-L/14 SAM-dense encoder upgrade
 
 **Decision.** Add ViT-L/14 as a second SAM-dense CLIP encoder via config-only change. ViT-L/14 produces 768-d features vs ViT-B/16's 512-d.
 
-**Rationale.** The 8-scene Replica aggregate hit@1 is 15.3% — the feature stack is the ceiling, not the backend. ViT-L/14 is a stronger encoder that may improve grounding accuracy with no pipeline code changes.
+**Rationale.** The 8-scene Replica aggregate hit@1 is 15.3%, the feature stack is the ceiling, not the backend. ViT-L/14 is a stronger encoder that may improve grounding accuracy with no pipeline code changes.
 
 **VRAM.** ViT-L/14 is ~1.5 GB vs ViT-B/16's ~0.5 GB. With MobileSAM (~150 MB) and a 4 cm block_hash volume (~1.8 GB), total is ~3.5 GB. Fits in 12 GB.
 
-**Status.** Configs landed (`configs/replica_room0_4cm_block_hash_sam_vitl14.yaml`, `configs/replica_office0_4cm_block_hash_sam_vitl14.yaml`). End-to-end encode+eval deferred — needs ~1.5 GB ViT-L/14 download and a fresh MobileSAM run.
+**Status.** Configs landed (`configs/replica_room0_4cm_block_hash_sam_vitl14.yaml`, `configs/replica_office0_4cm_block_hash_sam_vitl14.yaml`). End-to-end encode+eval deferred, needs ~1.5 GB ViT-L/14 download and a fresh MobileSAM run.
 
-## 2026-04-23 — LSeg dense encoder (mode: "lseg")
+## 2026-04-23: LSeg dense encoder (mode: "lseg")
 
-**Decision.** Add LSeg as a new `mode: "lseg"` — a DPT backbone producing per-pixel 512-d features aligned with CLIP ViT-B/32, in a single forward pass with no SAM masks.
+**Decision.** Add LSeg as a new `mode: "lseg"`: a DPT backbone producing per-pixel 512-d features aligned with CLIP ViT-B/32, in a single forward pass with no SAM masks.
 
 **Rationale.** SAM-dense is bottlenecked by mask generation (~0.6 FPS). LSeg bypasses this entirely. The trade-off is that LSeg uses a fixed pre-trained checkpoint (Intel ISL, archived) while SAM-dense benefits from any CLIP upgrade.
 
 **Interoperability.** LSeg maps store `model: ViT-B-32` and `pretrained: openai`. They are NOT interchangeable with ViT-B/16 or ViT-L/14 maps for text queries. Model-name validation at load time prevents mismatched cosine scores.
 
-**Status.** Encoder class shipped (`src/openvocab_tsdf/semantics/lseg_encoder.py`), pipeline wired (`encode_and_fuse` accepts `mode: "lseg"`), shape unit tests green. End-to-end encode+eval deferred — needs the 400 MB LSeg checkpoint download.
+**Status.** Encoder class shipped (`src/openvocab_tsdf/semantics/lseg_encoder.py`), pipeline wired (`encode_and_fuse` accepts `mode: "lseg"`), shape unit tests green. End-to-end encode+eval deferred, needs the 400 MB LSeg checkpoint download.
 
-## 2026-04-23 — Model-name validation at map load
+## 2026-04-23: Model-name validation at map load
 
 **Decision.** `ground_text()` now validates that the text encoder model matches the map's stored `model` key via `_validate_model_match`. Mismatched encoders raise `ValueError`. Maps with empty `model` (legacy) bypass the check.
 
 **Rationale.** With three encoder modes producing features in different CLIP text spaces (ViT-B/16, ViT-L/14, ViT-B/32), silently using the wrong text encoder produces garbage cosine scores. Fail-fast is strictly better. The eval harness logs a warning instead of raising so the existing eval specs (which can override `model`) keep working.
 
-## 2026-04-23 — Dockerfile (offline pipeline only)
+## 2026-04-23: Dockerfile (offline pipeline only)
 
 **Decision.** Ship a minimal Dockerfile based on `nvcr.io/nvidia/pytorch:24.09-py3` that covers the offline pipeline (fuse, encode, eval, ground). ROS 2 Humble is excluded (would triple image size).
 
 **Rationale.** Reproducibility for paper reviewers and collaborators. The ROS 2 deployment is a separate concern with its own colcon build.
 
-**Status.** Dockerfile + .dockerignore committed. End-to-end build (`docker build -t openvocab-tsdf:latest .`) not exercised in this session — the base image pull alone is multi-GB.
+**Status.** Dockerfile + .dockerignore committed. End-to-end build (`docker build -t openvocab-tsdf:latest .`) not exercised in this session, the base image pull alone is multi-GB.
 
 ---
 
-## 2026-05-12 — Dense-encoder phase close (17/17)
+## 2026-05-12: Dense-encoder phase close (17/17)
 
 **Decision.** Treat the 17-task dense-encoder plan as complete. The final
 two LSeg encode + eval runs (Task 11) landed on 2026-05-12.

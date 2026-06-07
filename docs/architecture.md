@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **draft v1** — locks in the high-level choices. Per-component design docs live under `docs/design/` as they are written.
+Status: **draft v1**: locks in the high-level choices. Per-component design docs live under `docs/design/` as they are written.
 
 ## System Overview
 
@@ -57,18 +57,18 @@ Dataset-agnostic loader producing a typed `RGBDFrame` stream: `(color: u8[H,W,3]
 
 ### 2. TSDF fusion core (`src/openvocab_tsdf/mapping/`)
 GPU-resident voxel structure. Implemented backends:
-1. **Reference** (`mapping/reference.py`) — PyTorch dense TSDF. Slow but simple, correctness ground truth. All other backends are parity-tested against it.
-2. **Triton** (`mapping/triton_backend.py`) — sm_120-compatible Triton geometry kernel; geometry only (no per-voxel features yet).
-3. **SparseFeatureTSDF** (`mapping/sparse_reference.py`) — dense geometry + lazy per-voxel feature pool; ~3× feature-memory reduction at room scale.
-4. **BlockHashTSDF** (`mapping/block_hash.py`) — block-hash sparse *geometry* with optional per-voxel sparse features composed on top; frustum-culled integrate.
+1. **Reference** (`mapping/reference.py`), PyTorch dense TSDF. Slow but simple, correctness ground truth. All other backends are parity-tested against it.
+2. **Triton** (`mapping/triton_backend.py`), sm_120-compatible Triton geometry kernel; geometry only (no per-voxel features yet).
+3. **SparseFeatureTSDF** (`mapping/sparse_reference.py`), dense geometry + lazy per-voxel feature pool; ~3× feature-memory reduction at room scale.
+4. **BlockHashTSDF** (`mapping/block_hash.py`), block-hash sparse *geometry* with optional per-voxel sparse features composed on top; frustum-culled integrate.
 
-A native CUDA backend was originally planned and is logged in `decisions.md` as deferred — Triton fills that role today and is the documented "fast kernel" path. All backends satisfy the same `TSDFVolume` interface: `integrate(frame) -> None`, `extract_mesh() -> Mesh`, `query(points_w) -> VoxelQueryResult(tsdf, weight, color, feat)`.
+A native CUDA backend was originally planned and is logged in `decisions.md` as deferred, Triton fills that role today and is the documented "fast kernel" path. All backends satisfy the same `TSDFVolume` interface: `integrate(frame) -> None`, `extract_mesh() -> Mesh`, `query(points_w) -> VoxelQueryResult(tsdf, weight, color, feat)`.
 
 ### 3. Open-vocab semantics (`src/openvocab_tsdf/semantics/`)
 OpenCLIP encoder running in fp16 on GPU. Three feature modes are implemented:
-- **`global`** — one ViT-B/16 embedding per frame (fast, coarse). Baseline.
-- **`patch`** — ViT patch tokens lifted into 3D via the MaskCLIP last-block-attention bypass plus per-voxel patch lookup through the encoder's preprocess mapping. `reference` backend only.
-- **`sam_dense`** — MobileSAM auto-masks → CLIP per-mask crops → per-pixel dense feature map (with mask-IoU blending and a frame-global fallback for pixels outside every mask). `reference` and `block_hash` backends.
+- **`global`**: one ViT-B/16 embedding per frame (fast, coarse). Baseline.
+- **`patch`**: ViT patch tokens lifted into 3D via the MaskCLIP last-block-attention bypass plus per-voxel patch lookup through the encoder's preprocess mapping. `reference` backend only.
+- **`sam_dense`**: MobileSAM auto-masks → CLIP per-mask crops → per-pixel dense feature map (with mask-IoU blending and a frame-global fallback for pixels outside every mask). `reference` and `block_hash` backends.
 
 Features are pooled into voxels during fusion via a weighted running mean. The per-frame contribution is restricted to voxels whose normalized TSDF is within `near_surface_band` (default 0.5) so free-space voxels in front of a surface do not "steal" the features of whatever the ray eventually hits.
 
@@ -80,8 +80,8 @@ Open3D-based viewer for meshes, voxels, and query heatmaps. Used in tests, noteb
 
 ### 6. ROS 2 interface (`ros2_ws/`)
 Single node `openvocab_tsdf_node` (with `openvocab_tsdf_msgs` for the service type). Two modes selected via the `live_mode` parameter:
-- **offline** (default) — loads a saved feature map (`dense`, `voxel_slot`, or `block_hash` `sparse_kind`) through the shared `grounding.map_bundle.MapBundle` loader and serves `/openvocab/ground`.
-- **live** — synchronizes color + depth + camera_info + TF, runs CLIP encode + `ReferenceTSDF.integrate` per frame, and publishes a CUBE_LIST RViz preview.
+- **offline** (default), loads a saved feature map (`dense`, `voxel_slot`, or `block_hash` `sparse_kind`) through the shared `grounding.map_bundle.MapBundle` loader and serves `/openvocab/ground`.
+- **live**: synchronizes color + depth + camera_info + TF, runs CLIP encode + `ReferenceTSDF.integrate` per frame, and publishes a CUBE_LIST RViz preview.
 
 ## Technology Choices
 
@@ -131,13 +131,13 @@ These are contracts. Breaking one requires a `docs/decisions.md` entry.
 | Phase | Done-criteria | Estimated time (realistic) |
 |---|---|---|
 | 0. Audit + arch | This doc + scaffolded repo + env installed | < 1 session |
-| 1. Geometry | RGB-D → TSDF → mesh on Replica, parity between reference and CUDA impl | 2–3 sessions |
+| 1. Geometry | RGB-D → TSDF → mesh on Replica, parity between reference and CUDA impl | 2-3 sessions |
 | 2. Semantics | CLIP features fused into voxels, qualitative text queries work on 1 scene | 2 sessions |
-| 2b. Dense features (optional) | Patch or mask-based features; ablation vs global | 1–2 sessions |
+| 2b. Dense features (optional) | Patch or mask-based features; ablation vs global | 1-2 sessions |
 | 3. Query engine | Ranked 3D targets + confidence, metrics harness | 2 sessions |
-| 4. Optimization | Custom CUDA hits perf targets; TensorRT for VLM encode | 2–3 sessions |
+| 4. Optimization | Custom CUDA hits perf targets; TensorRT for VLM encode | 2-3 sessions |
 | 5. ROS 2 | Node, service, bag replay demo | 2 sessions |
-| 6. Polish | Docs, failure cases, ablations, publishable figures | 1–2 sessions |
+| 6. Polish | Docs, failure cases, ablations, publishable figures | 1-2 sessions |
 
 ## Risks and Mitigations
 

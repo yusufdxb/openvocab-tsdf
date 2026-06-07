@@ -20,7 +20,7 @@ You may need to adjust the torch install depending on your GPU:
 
 | GPU | Recommended |
 |---|---|
-| RTX 5070 / Blackwell | PyTorch nightly built against CUDA 12.8 (`+cu128`) — needed for `sm_120` |
+| RTX 5070 / Blackwell | PyTorch nightly built against CUDA 12.8 (`+cu128`), needed for `sm_120` |
 | RTX 40-series / 30-series | PyTorch 2.6+ stable with CUDA 12.x |
 | No GPU | Reference backend runs on CPU; Triton backend does not |
 
@@ -53,7 +53,7 @@ Renders a 3-object scene (red sphere, green floor, blue bar), encodes CLIP featu
 .venv/bin/python benchmarks/bench_tsdf_fuse.py --backend triton   --frames 64
 ```
 
-Results land in `benchmarks/results/<stamp>_tsdf_fuse_<backend>.json`. These files are tracked — run again after any change to the kernel path.
+Results land in `benchmarks/results/<stamp>_tsdf_fuse_<backend>.json`. These files are tracked, run again after any change to the kernel path.
 
 ## 5. Run on a real dataset
 

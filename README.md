@@ -61,14 +61,14 @@ graph TD
 > 570.211.01, `torch 2.11.0+cu128`) under the corrected near-surface
 > feature gate. The quoted Replica grounding numbers below come from
 > these JSONs in `benchmarks/results/`:
-> - `20260416T150054Z_eval_grounding.json` — room0 / 6 cm / sam_dense
-> - `20260416T150413Z_eval_grounding.json` — office0 / 6 cm / sam_dense
-> - `20260416T150504Z_eval_grounding.json` — room0 / 6 cm / global
-> - `20260416T150537Z_eval_grounding.json` — office0 / 6 cm / global
-> - `20260416T150631Z_eval_grounding.json` — room0 / 6 cm / patch
+> - `20260416T150054Z_eval_grounding.json`: room0 / 6 cm / sam_dense
+> - `20260416T150413Z_eval_grounding.json`: office0 / 6 cm / sam_dense
+> - `20260416T150504Z_eval_grounding.json`: room0 / 6 cm / global
+> - `20260416T150537Z_eval_grounding.json`: office0 / 6 cm / global
+> - `20260416T150631Z_eval_grounding.json`: room0 / 6 cm / patch
 >
 > Throughput / VRAM / encode FPS / mesh counts were not remeasured in
-> this pass (the gate fix doesn't change them — it narrows which voxels
+> this pass (the gate fix doesn't change them, it narrows which voxels
 > receive features, not which kernels run) and are carried forward
 > from the pre-fix benchmark JSONs already in `benchmarks/results/`.
 
@@ -78,49 +78,49 @@ graph TD
 |---|---|---|---|
 | room0 / 6 cm / sam_dense row | `outputs/postfix_room0_6cm_sam.npz` | `benchmarks/results/20260416T150054Z_eval_grounding.json` | `figures/postfix_room0_sam/` |
 | room0 / 6 cm / global row | `outputs/postfix_room0_global.npz` | `benchmarks/results/20260416T150504Z_eval_grounding.json` | `figures/postfix_room0_global/` |
-| room0 / 6 cm / patch row | `outputs/postfix_room0_patch.npz` | `benchmarks/results/20260416T150631Z_eval_grounding.json` | — (no PNGs cited) |
+| room0 / 6 cm / patch row | `outputs/postfix_room0_patch.npz` | `benchmarks/results/20260416T150631Z_eval_grounding.json` |, (no PNGs cited) |
 | office0 / 6 cm / sam_dense row | `outputs/postfix_office0_6cm_sam.npz` | `benchmarks/results/20260416T150413Z_eval_grounding.json` | `figures/postfix_office0_sam/` |
 | office0 / 6 cm / global row | `outputs/postfix_office0_global.npz` | `benchmarks/results/20260416T150537Z_eval_grounding.json` | `figures/postfix_office0_global/` |
-| synthetic 3-object demo row | `outputs/postfix_demo_map.npz` | `benchmarks/results/20260416T150856Z_eval_grounding.json` | — (synthetic; no mesh figures) |
-| room0 / 4 cm / block_hash + sam row | `outputs/postfix_room0_4cm_block_hash_sam.npz` | `benchmarks/results/20260416T151324Z_eval_grounding.json` | — (benchmark table only) |
+| synthetic 3-object demo row | `outputs/postfix_demo_map.npz` | `benchmarks/results/20260416T150856Z_eval_grounding.json` |, (synthetic; no mesh figures) |
+| room0 / 4 cm / block_hash + sam row | `outputs/postfix_room0_4cm_block_hash_sam.npz` | `benchmarks/results/20260416T151324Z_eval_grounding.json` |, (benchmark table only) |
 | global-vs-SAM comparison grid | both `outputs/postfix_room0_{global,sam}.npz` | the two JSONs above | `figures/postfix_comparison_room0/` |
 
-Rows not in this table (TSDF-fuse FPS, CLIP / MobileSAM encode FPS + TRT parity, sparse-feature backend FPS, block-hash geometry row, live ROS 2 smoke test) are **carried forward from pre-fix benchmark JSONs** in `benchmarks/results/`. They are not remeasured because the gate fix is a feature-write predicate — it runs after the encoders and the fuse kernels — so their numbers are invariant under the fix. Each of those rows cites its pre-fix JSON in place.
+Rows not in this table (TSDF-fuse FPS, CLIP / MobileSAM encode FPS + TRT parity, sparse-feature backend FPS, block-hash geometry row, live ROS 2 smoke test) are **carried forward from pre-fix benchmark JSONs** in `benchmarks/results/`. They are not remeasured because the gate fix is a feature-write predicate, it runs after the encoders and the fuse kernels, so their numbers are invariant under the fix. Each of those rows cites its pre-fix JSON in place.
 
 **Synthetic scene (3 primitives, 32 frames, 224×224):**
 - TSDF fuse, Triton backend: **4423 FPS**, 25 MB peak VRAM (pre-fix; gate doesn't change throughput)
 - TSDF fuse, reference backend: 1486 FPS, 68 MB peak VRAM
 - Grounding (global features, 0.1 m bbox slack, post-fix gate): **hit@1 = 66.7 %, hit@5 = 100 %**, mean top-1 L2 = 0.30 m, 54 ms per query (`benchmarks/results/20260416T150856Z_eval_grounding.json`)
 - End-to-end grounding query (text encode + voxel scan + cluster): **~50 ms**
-- ROS 2 service `/openvocab/ground` — DDS roundtrip returns ranked targets in well under a second
+- ROS 2 service `/openvocab/ground`: DDS roundtrip returns ranked targets in well under a second
 
-**Real scene (NICE-SLAM demo — 500 RGB-D frames @ 640×480, 1.2 M voxels at 6 cm):**
+**Real scene (NICE-SLAM demo, 500 RGB-D frames @ 640×480, 1.2 M voxels at 6 cm):**
 - Encode + fuse (patch-mode CLIP ViT-B/16 + MaskCLIP lift): **≈1.8 s end-to-end** (CLIP image encode 0.93 s, feature fusion 0.87 s)
 - Reference backend geometry fuse: 79.6 FPS at native 640×480, mesh 25.1 k vertices / 50.4 k triangles
 - Query latency: <100 ms per free-form prompt against the 1.2 M-voxel feature map
 - Per-query heatmap PLYs: 19.4 k surface points each (`outputs/heatmaps_demo/*.ply`)
 
 **Replica `room0` (500 frames @ 1200×680, 1.67 M voxels at 6 cm):**
-- CLIP patch encode: 1.91 s (262 FPS), feature fusion: 3.51 s (143 FPS at native 1200×680) — pre-fix (encode+fuse kernels unchanged by the gate)
-- Geometry fuse: 81.3 FPS, mesh 97.3 k vertices / 194 k triangles — pre-fix
-- Per-query latency under post-fix global-CLIP map: **77–249 ms** (mean 123 ms) across the 9-case spec — `benchmarks/results/20260416T150504Z_eval_grounding.json`
-- Per-query latency under post-fix SAM-dense map: **49–210 ms** (mean 101 ms) — `benchmarks/results/20260416T150054Z_eval_grounding.json`
-- Post-fix heatmap PLYs: `outputs/heatmaps_postfix_room0_{global,sam}/*.ply`, 100–104 k points each
+- CLIP patch encode: 1.91 s (262 FPS), feature fusion: 3.51 s (143 FPS at native 1200×680), pre-fix (encode+fuse kernels unchanged by the gate)
+- Geometry fuse: 81.3 FPS, mesh 97.3 k vertices / 194 k triangles, pre-fix
+- Per-query latency under post-fix global-CLIP map: **77-249 ms** (mean 123 ms) across the 9-case spec, `benchmarks/results/20260416T150504Z_eval_grounding.json`
+- Per-query latency under post-fix SAM-dense map: **49-210 ms** (mean 101 ms), `benchmarks/results/20260416T150054Z_eval_grounding.json`
+- Post-fix heatmap PLYs: `outputs/heatmaps_postfix_room0_{global,sam}/*.ply`, 100-104 k points each
 
-### Grounding accuracy — Replica, hand-annotated
+### Grounding accuracy: Replica, hand-annotated
 
 See `eval/specs/replica_room0.yaml` and `eval/specs/replica_office0.yaml` for the annotation protocol (structural queries derived from the mesh's horizontal-surface z histogram; object bboxes from a `scripts/inspect_replica_mesh.py` density map, conservatively widened with a 0.2 m bbox slack).
 
-**Publishable figures — all re-rendered 2026-04-16 from the post-fix maps (`outputs/postfix_*.npz`).** Each query renders as a 3-panel xy/xz/yz projection with the mesh washed out in gray, the top-20 % heatmap voxels colored viridis, and the hand-annotated GT bbox outlined in red. Representative examples, all from the post-fix maps:
+**Publishable figures, all re-rendered 2026-04-16 from the post-fix maps (`outputs/postfix_*.npz`).** Each query renders as a 3-panel xy/xz/yz projection with the mesh washed out in gray, the top-20 % heatmap voxels colored viridis, and the hand-annotated GT bbox outlined in red. Representative examples, all from the post-fix maps:
 
-- `figures/postfix_room0_sam/the_floor.png` — hot voxels sit inside the thin floor-plane bbox in xz and yz; rank=1 hit in `20260416T150054Z_eval_grounding.json`.
-- `figures/postfix_room0_sam/a_sofa.png` — heatmap mass lands inside the sofa bbox (xy + xz); rank=1 hit@1 for this query.
-- `figures/postfix_room0_sam/a_bookshelf.png` — hot voxels cluster along the east-column region; rank=3 on this spec (hit@5-only). Honest: room0 object-level top-1 is still hard even under SAM-dense.
-- `figures/postfix_room0_global/a_sofa.png` — hot voxels scatter across the room (rank=4 hit@5 for global CLIP on this query); honest side-by-side with the SAM figure above.
-- `figures/postfix_comparison_room0/a_sofa_compare.png` — same query, same scene, baseline (global CLIP) vs treatment (SAM + CLIP) in a 2-row × 3-view grid. The hot-voxel concentration into the sofa bbox is visibly tighter on the SAM row.
-- `figures/postfix_office0_sam/a_chair.png` — rank=1 hit on office0 SAM-dense (`20260416T150413Z_eval_grounding.json`).
+- `figures/postfix_room0_sam/the_floor.png`: hot voxels sit inside the thin floor-plane bbox in xz and yz; rank=1 hit in `20260416T150054Z_eval_grounding.json`.
+- `figures/postfix_room0_sam/a_sofa.png`: heatmap mass lands inside the sofa bbox (xy + xz); rank=1 hit@1 for this query.
+- `figures/postfix_room0_sam/a_bookshelf.png`: hot voxels cluster along the east-column region; rank=3 on this spec (hit@5-only). Honest: room0 object-level top-1 is still hard even under SAM-dense.
+- `figures/postfix_room0_global/a_sofa.png`: hot voxels scatter across the room (rank=4 hit@5 for global CLIP on this query); honest side-by-side with the SAM figure above.
+- `figures/postfix_comparison_room0/a_sofa_compare.png`: same query, same scene, baseline (global CLIP) vs treatment (SAM + CLIP) in a 2-row × 3-view grid. The hot-voxel concentration into the sofa bbox is visibly tighter on the SAM row.
+- `figures/postfix_office0_sam/a_chair.png`: rank=1 hit on office0 SAM-dense (`20260416T150413Z_eval_grounding.json`).
 
-**Figures are evidence-consistent with the tables above**: the same `outputs/postfix_*.npz` maps feed both. The legacy pre-fix figure directories (`figures/room0/`, `figures/office0/`, `figures/room0_sam/`, `figures/comparison_room0/`) are retained for historical comparison only — any claim in this README points at `figures/postfix_*/`.
+**Figures are evidence-consistent with the tables above**: the same `outputs/postfix_*.npz` maps feed both. The legacy pre-fix figure directories (`figures/room0/`, `figures/office0/`, `figures/room0_sam/`, `figures/comparison_room0/`) are retained for historical comparison only, any claim in this README points at `figures/postfix_*/`.
 
 Regenerate:
 
@@ -167,7 +167,7 @@ python scripts/render_comparison.py \
 | office0 / global  | 25.0 % → **37.5 %** (+12.5) | 87.5 % → 75.0 % (−12.5)    | 2.15 → **1.79** (−0.36)    |
 | **office0 / sam_dense** | 37.5 % → **37.5 %** (±0) | 75.0 % → 62.5 % (−12.5)    | 1.54 → **1.50** (−0.04)    |
 
-### Dense encoder comparison — Replica room0 + office0 (2026-05-09)
+### Dense encoder comparison: Replica room0 + office0 (2026-05-09)
 
 Three-way head-to-head between the two SAM-dense CLIP variants (ViT-B/16
 and ViT-L/14) and the LSeg DPT-Large dense encoder. Same hand-annotated
@@ -220,20 +220,20 @@ Delta vs the global-features baseline, head-to-head on the same scenes (post-fix
 | office0 | hit@5         | **75.0 %** | 62.5 %     | −12.5 pp (worse) |
 | office0 | hit-L2 (m)    | 1.79    | **1.50**      | −0.29 (−16 %) |
 
-SAM-dense still wins on `room0` (where global features mis-point at the most-observed wall, so any precision boost helps); on `office0`, global narrowly wins on `hit@5` because the scene is small enough that even a contaminated cluster lands inside the loose bbox. SAM-dense wins on hit-L2 in both scenes — the centroids land closer to the GT center even when the bbox-membership flip rates differ.
+SAM-dense still wins on `room0` (where global features mis-point at the most-observed wall, so any precision boost helps); on `office0`, global narrowly wins on `hit@5` because the scene is small enough that even a contaminated cluster lands inside the loose bbox. SAM-dense wins on hit-L2 in both scenes, the centroids land closer to the GT center even when the bbox-membership flip rates differ.
 
-The mapping stack doesn't change — only the feature extractor does. MobileSAM (`vit_t`, 40 MB weights) runs at ~384×384 downsampled input (~1.7 s / native-resolution frame); CLIP is run on ~20–40 mask crops batched. Total pipeline cost is dominated by SAM; encode throughput drops from ~250 FPS (global) to ~0.6 FPS (SAM dense), which is why we stride 20× for this config. Feature *quality* on the per-voxel side is substantially better.
+The mapping stack doesn't change, only the feature extractor does. MobileSAM (`vit_t`, 40 MB weights) runs at ~384×384 downsampled input (~1.7 s / native-resolution frame); CLIP is run on ~20-40 mask crops batched. Total pipeline cost is dominated by SAM; encode throughput drops from ~250 FPS (global) to ~0.6 FPS (SAM dense), which is why we stride 20× for this config. Feature *quality* on the per-voxel side is substantially better.
 
-Fig: `figures/postfix_room0_sam/a_sofa.png` — the top-brightness-quartile heatmap voxels cluster inside the GT sofa bbox (xy + xz) on the post-fix map. Compare against `figures/postfix_room0_global/a_sofa.png` (global features, same post-fix gate) where the hot voxels scatter across the room. `figures/postfix_comparison_room0/a_sofa_compare.png` stacks both rows on one canvas.
+Fig: `figures/postfix_room0_sam/a_sofa.png`: the top-brightness-quartile heatmap voxels cluster inside the GT sofa bbox (xy + xz) on the post-fix map. Compare against `figures/postfix_room0_global/a_sofa.png` (global features, same post-fix gate) where the hot voxels scatter across the room. `figures/postfix_comparison_room0/a_sofa_compare.png` stacks both rows on one canvas.
 
 **Full ablation on room0** (8 configs, patch vs global × mean-sub × top-percentile): see the `eval/run_ablation.py` output embedded in commit `a1a628e`. That ablation was run on pre-fix features; the post-fix numbers in this README's headline table are the authoritative values.
 
 **Honest takeaways (post-fix gate).**
-- **`room0` SAM-dense is the strongest real-data result in the repo.** **hit@1 = 55.6 %, hit@5 = 100.0 %** on a 9-query hand-annotated spec — every annotated query lands inside the GT bbox in the top-5. Pre-fix this row was 88.9 % hit@5; the corrected gate's stricter voxel placement closes the last gap. Source: `benchmarks/results/20260416T150054Z_eval_grounding.json`.
-- **The gate fix is not uniformly positive.** `office0 / sam_dense` regressed from 75.0 % → 62.5 % hit@5; that's an honest cost of refusing to write features into free-space voxels. Where contamination happened to point at the right region by accident, removing it costs a hit. Mean centroid L2 still improved (1.54 → 1.50 m) — when SAM-dense does land a hit, it lands closer.
+- **`room0` SAM-dense is the strongest real-data result in the repo.** **hit@1 = 55.6 %, hit@5 = 100.0 %** on a 9-query hand-annotated spec, every annotated query lands inside the GT bbox in the top-5. Pre-fix this row was 88.9 % hit@5; the corrected gate's stricter voxel placement closes the last gap. Source: `benchmarks/results/20260416T150054Z_eval_grounding.json`.
+- **The gate fix is not uniformly positive.** `office0 / sam_dense` regressed from 75.0 % → 62.5 % hit@5; that's an honest cost of refusing to write features into free-space voxels. Where contamination happened to point at the right region by accident, removing it costs a hit. Mean centroid L2 still improved (1.54 → 1.50 m), when SAM-dense does land a hit, it lands closer.
 - **`room0` object-level stays hard.** Best `room0 hit@1` across all four modes is still 55.6 % (SAM-dense). Patch mode is the weakest configuration (`hit@1 = 11.1 %`); natural-image CLIP patch tokens are known weak for dense localization without a task-trained dense head (LSeg / OpenSeg), which is the correct next experiment.
-- **Latency: 50–233 ms per query** (room0 sam_dense: 100 ms; room0 patch: 233 ms; office0: 50 ms). Includes text encode + voxel scan + connected-component cluster. Dominated by `MapBundle.score_query`'s `(Nx, Ny, Nz)` scatter at room scale.
-- **Encode throughput (post-fix, RTX 5070):** SAM-dense 0.5–0.6 fuse-FPS (100 frames in ~170–185 s); global 130–145 fuse-FPS (500 frames in ~3 s). Numbers preserved from the 2026-04-16 rerun stdout, not from a benchmark JSON.
+- **Latency: 50-233 ms per query** (room0 sam_dense: 100 ms; room0 patch: 233 ms; office0: 50 ms). Includes text encode + voxel scan + connected-component cluster. Dominated by `MapBundle.score_query`'s `(Nx, Ny, Nz)` scatter at room scale.
+- **Encode throughput (post-fix, RTX 5070):** SAM-dense 0.5-0.6 fuse-FPS (100 frames in ~170-185 s); global 130-145 fuse-FPS (500 frames in ~3 s). Numbers preserved from the 2026-04-16 rerun stdout, not from a benchmark JSON.
 
 ### Replica 8-scene aggregate (4 cm `block_hash` + `sam_dense`, 2026-04-19)
 
@@ -319,7 +319,7 @@ python scripts/gen_scannet_eval_specs.py \
 
 The PyTorch-fp32 row was re-measured under the post-fix gate
 (`benchmarks/results/20260416T150054Z_eval_grounding.json`) and
-matches the pre-fix value at 55.6 % — the gate fix doesn't move
+matches the pre-fix value at 55.6 %, the gate fix doesn't move
 this configuration's `hit@1`. The two TRT rows have not been
 re-measured under the post-fix gate; the qualitative conclusion
 ("fp32 preserves parity, fp16 is end-to-end broken because its
@@ -348,16 +348,16 @@ Combined backend (block-hash geometry + voxel-slot features + SAM-dense semantic
 | feature storage | **604.6 MB** (post-fix) vs 3 280 MB (pre-fix) | ≫ that if dense at 4 cm | |
 | encode + fuse | 178 s / 100 frames | 185 s / 100 frames (6 cm) | |
 
-The gate fix has two visible effects on this configuration: feature memory drops 5.4× (because allocations are now restricted to the actual surface shell), and `hit@1` drops from 55.6 % to 22.2 % at the finer voxel size. The pre-fix `hit@1` was inflated: contamination from free-space voxels gave the top cluster a broad enough footprint to land inside the GT bbox, but for the wrong geometric reason. With the gate honest, the 4 cm SAM clusters are smaller and more numerous, so the top-1 ranking spreads over more nearby candidates — `hit@5` is barely affected (77.8 %), but the top pick is no longer always the right one. The 6 cm SAM variant on the dense reference backend stays the strongest configuration in the repo.
+The gate fix has two visible effects on this configuration: feature memory drops 5.4× (because allocations are now restricted to the actual surface shell), and `hit@1` drops from 55.6 % to 22.2 % at the finer voxel size. The pre-fix `hit@1` was inflated: contamination from free-space voxels gave the top cluster a broad enough footprint to land inside the GT bbox, but for the wrong geometric reason. With the gate honest, the 4 cm SAM clusters are smaller and more numerous, so the top-1 ranking spreads over more nearby candidates, `hit@5` is barely affected (77.8 %), but the top pick is no longer always the right one. The 6 cm SAM variant on the dense reference backend stays the strongest configuration in the repo.
 
-**Block-hash sparse *geometry* (`BlockHashTSDF`) — 12 m³ cube, 4 cm voxels, 24 synthetic frames:**
+**Block-hash sparse *geometry* (`BlockHashTSDF`), 12 m³ cube, 4 cm voxels, 24 synthetic frames:**
 
 | backend | geom storage | allocated blocks | peak VRAM | integrate |
 |---|---|---|---|---|
 | dense reference | 540.0 MB | 54 872 / 54 872 (100 %) | 2484 MB | 48 FPS |
 | **block_hash** | **8.5 MB** | **831 / 54 872 (1.51 %)** | **2103 MB** | **51 FPS** |
 
-**63× less geometry memory** at similar throughput. The scene is tiled into 8³-voxel blocks with a dense `block_slot[Nbx, Nby, Nbz]` int32 index (0.2 % of the full voxel count); blocks are allocated lazily on first observation, and an integrate-time 2-pass GPU scatter writes tsdf/weight/color into the pool (`benchmarks/bench_block_hash_scale.py`). Feature storage is still the per-voxel `SparseFeatureTSDF` above — the two sparse backends compose.
+**63× less geometry memory** at similar throughput. The scene is tiled into 8³-voxel blocks with a dense `block_slot[Nbx, Nby, Nbz]` int32 index (0.2 % of the full voxel count); blocks are allocated lazily on first observation, and an integrate-time 2-pass GPU scatter writes tsdf/weight/color into the pool (`benchmarks/bench_block_hash_scale.py`). Feature storage is still the per-voxel `SparseFeatureTSDF` above, the two sparse backends compose.
 
 Honest limitation: the integrate pass is now frustum-culled at the block level (cheap per-block test against the camera frustum, then per-voxel projection only on surviving blocks), so per-frame work is bounded by the frustum, not by the bounding-box voxel count. The remaining boundary is the load-side densification of `tsdf` and `weight` for grounding (`densify_block_pool`): it materializes two full-volume fp32 tensors, which is fine at room scale (~MBs) but will OOM at warehouse scale. The grounding score path itself stays sparse (`scatter_feat_pool_values` produces a dense scores tensor without ever materialising the 4-D feature volume), so the ceiling is the geometry densification, not the features.
 
@@ -369,8 +369,8 @@ Honest limitation: the integrate pass is now frustum-culled at the block level (
 | sparse (PyTorch `index_copy_`) | 123 | 1070.2 | 547 947 | 32.45 % | 3430 |
 | **sparse (Triton kernel)** | **209** | **1070.2** | **547 947** | **32.45 %** | **3272** |
 
-- Feature-memory reduction: **3.08×** (lazy per-voxel slot allocation — memory is proportional to observed surface, not to the bounding box)
-- Integrate-throughput speedup from the Triton kernel: **1.70× over the PyTorch sparse path, 1.76× over the dense reference** — one JIT kernel fuses the slot-indexed gather + weighted-mean + scatter.
+- Feature-memory reduction: **3.08×** (lazy per-voxel slot allocation, memory is proportional to observed surface, not to the bounding box)
+- Integrate-throughput speedup from the Triton kernel: **1.70× over the PyTorch sparse path, 1.76× over the dense reference**: one JIT kernel fuses the slot-indexed gather + weighted-mean + scatter.
 - See `benchmarks/bench_sparse_features.py` and `src/openvocab_tsdf/mapping/sparse_reference.py` (set `feat_update_backend: triton` in `SparseFeatureTSDFConfig`).
 
 **Live ROS 2 mapping (smoke test on synthetic publisher):**
@@ -385,7 +385,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full plan, performanc
 Environment used for the 2026-04-16 regeneration:
 - GPU: NVIDIA GeForce RTX 5070 (sm_120 / Blackwell), 12 GB
 - Driver: `570.211.01` (CUDA 12.8 runtime line)
-- PyTorch: `2.11.0+cu128` (NOT the default `+cu130` wheel — see "Driver / torch matrix" below)
+- PyTorch: `2.11.0+cu128` (NOT the default `+cu130` wheel, see "Driver / torch matrix" below)
 - OpenCLIP `ViT-B-16 / laion2b_s34b_b88k`, fp16
 - MobileSAM `vit_t`, fp32 PyTorch (TRT path not exercised in this rerun)
 
@@ -435,8 +435,8 @@ because it is the more portable choice for sm_120 hardware today.
 
 ## Why this project
 
-- Modern 3D perception (TSDF / sparse voxel hashing) — not another 2D detector repo.
-- Serious GPU-first systems work — custom CUDA kernels, profiled, budgeted.
+- Modern 3D perception (TSDF / sparse voxel hashing), not another 2D detector repo.
+- Serious GPU-first systems work, custom CUDA kernels, profiled, budgeted.
 - Open-vocabulary grounding instead of closed-set detection.
 - Benchmark-first discipline: every perf claim has a JSON file behind it.
 - Clean offline pipeline with a ROS 2 wrapper, not a live-only demo.
@@ -487,7 +487,7 @@ python scripts/export_heatmaps.py --map outputs/demo_map.npz \
     --out-dir outputs/heatmaps
 ```
 
-The ROS 2 node exposing `/openvocab/ground` as a service lives at `ros2_ws/` — see its dedicated README.
+The ROS 2 node exposing `/openvocab/ground` as a service lives at `ros2_ws/`: see its dedicated README.
 
 ## Repository layout
 

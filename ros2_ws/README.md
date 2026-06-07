@@ -1,8 +1,8 @@
-# ROS 2 workspace — openvocab-tsdf
+# ROS 2 workspace: openvocab-tsdf
 
 Packages:
-  - `openvocab_tsdf_msgs` — `GroundingTarget.msg`, `GroundText.srv`
-  - `openvocab_tsdf_node` — Python node that wraps `openvocab_tsdf.pipeline`
+  - `openvocab_tsdf_msgs`: `GroundingTarget.msg`, `GroundText.srv`
+  - `openvocab_tsdf_node`: Python node that wraps `openvocab_tsdf.pipeline`
 
 ## Build
 
