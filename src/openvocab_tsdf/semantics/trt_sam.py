@@ -3,7 +3,7 @@
 MobileSAM's `image_encoder` is a TinyViT baked to a fixed 1024×1024 input
 (the positional embedding and window-attention shapes are static). It is
 the dominant cost inside `SAMDenseFeatureExtractor` — ~1.0–1.5 s / frame
-in fp32 PyTorch on an RTX 5070, which is what makes `sam_dense` pipelines
+in fp32 PyTorch on an NVIDIA Blackwell consumer GPU, which is what makes `sam_dense` pipelines
 feel offline-only. An fp16 TRT engine for the same forward drops that to
 ~150–300 ms, putting the real-time live-mapping path within reach.
 

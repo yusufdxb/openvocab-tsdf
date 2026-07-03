@@ -2,7 +2,7 @@
   "name": "block_hash_scale",
   "timestamp": "2026-04-13T16:39:39+00:00",
   "hardware": {
-    "gpu": "NVIDIA GeForce RTX 5070",
+    "gpu": "NVIDIA Blackwell consumer GPU",
     "vram_gb": 11.48,
     "host": "mewtwo"
   },

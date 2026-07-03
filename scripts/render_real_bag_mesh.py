@@ -1,73 +1,71 @@
-"""Render a headless 3-view PNG (top-down, front, side) of a colored PLY mesh.
+"""Render a shaded PNG of a colored TSDF mesh with Open3D offscreen (headless).
 
-No grounding heatmap required (unlike render_figures.py, which overlays a
-query heatmap). Used for the real GO2 rosbag reconstruction figure, where the
-point is showing the raw geometry + color, not a grounding result.
+Produces a single wide PNG with two lit views of the SAME mesh:
+  - left:  vertex-color shading (true reconstructed color)
+  - right: uniform-albedo shading (geometry-only, so the floor + wall read
+           as a solid lit surface rather than washed-out color)
 
-    python scripts/render_real_bag_mesh.py \\
+Runs headless via Filament's EGL surfaceless platform (no X display). If the
+offscreen context cannot be created on this box, exits non-zero so the caller
+falls back to another renderer.
+
+    EGL_PLATFORM=surfaceless \\
+    .venv/bin/python scripts/render_real_bag_mesh.py \\
         --mesh /path/to/go2_room_recon.ply \\
         --out figures/go2_real_bag_recon.png \\
-        --title "GO2 real-bag reconstruction (session_20260331_1957)"
+        --title "GO2 real-bag reconstruction"
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
-import matplotlib
+# Filament needs a headless EGL platform when there is no X display.
+os.environ.setdefault("EGL_PLATFORM", "surfaceless")
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import open3d as o3d  # noqa: E402
+from PIL import Image, ImageDraw, ImageFont  # noqa: E402
+
+rendering = o3d.visualization.rendering
 
 
-def _parse_ply(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Return (vertices xyz, colors rgb u8). Handles ascii-header binary bodies."""
-    with path.open("rb") as f:
-        props: list[tuple[str, str]] = []
-        n_verts = 0
-        in_vertex = False
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            if line.startswith(b"element vertex"):
-                n_verts = int(line.split()[-1])
-                in_vertex = True
-            elif line.startswith(b"element"):
-                in_vertex = False
-            elif line.startswith(b"property") and in_vertex:
-                parts = line.decode("ascii").strip().split()
-                props.append((parts[1], parts[2]))
-            elif line.startswith(b"end_header"):
-                break
+def _shaded_view(
+    mesh: o3d.geometry.TriangleMesh,
+    width: int,
+    height: int,
+    use_vertex_color: bool,
+) -> np.ndarray:
+    r = rendering.OffscreenRenderer(width, height)
+    r.scene.set_background([1.0, 1.0, 1.0, 1.0])
+    r.scene.scene.set_sun_light([-0.4, -0.6, -0.7], [1.0, 1.0, 1.0], 90000)
+    r.scene.scene.enable_sun_light(True)
 
-        dt_fields: list[tuple[str, str]] = []
-        for tname, pname in props:
-            dt_map = {
-                "float": "<f4",
-                "float32": "<f4",
-                "double": "<f8",
-                "uchar": "u1",
-                "uint8": "u1",
-                "int": "<i4",
-                "int32": "<i4",
-            }
-            dt_fields.append((pname, dt_map[tname]))
-        dt = np.dtype(dt_fields)
-        raw = np.frombuffer(f.read(n_verts * dt.itemsize), dtype=dt, count=n_verts)
-
-    xyz = np.stack([raw["x"], raw["y"], raw["z"]], axis=-1).astype(np.float32)
-    has_rgb = all(k in raw.dtype.names for k in ("red", "green", "blue"))
-    if has_rgb:
-        rgb = np.stack([raw["red"], raw["green"], raw["blue"]], axis=-1).astype(np.uint8)
+    mat = rendering.MaterialRecord()
+    mat.shader = "defaultLit"
+    if use_vertex_color:
+        m = mesh
     else:
-        rgb = np.full((len(xyz), 3), 180, dtype=np.uint8)
-    return xyz, rgb
+        m = o3d.geometry.TriangleMesh(mesh)
+        m.paint_uniform_color([0.72, 0.74, 0.78])
+    mat.base_color = [1.0, 1.0, 1.0, 1.0]
+    r.scene.add_geometry("mesh", m, mat)
 
+    # Frame the mesh: look down at an angle from the +x/-y corner so the floor
+    # and the wall are both visible in one shot.
+    bbox = mesh.get_axis_aligned_bounding_box()
+    center = bbox.get_center()
+    extent = bbox.get_extent()
+    radius = float(np.linalg.norm(extent)) * 0.5
+    eye = center + np.array([radius * 0.85, -radius * 1.0, radius * 0.7])
+    r.scene.camera.look_at(center, eye, [0.0, 0.0, 1.0])
 
-_PROJ_INDICES = {"xy": (0, 1), "xz": (0, 2), "yz": (1, 2)}
+    img = r.render_to_image()
+    arr = np.asarray(img).copy()
+    del r
+    return arr
 
 
 def main() -> None:
@@ -75,44 +73,53 @@ def main() -> None:
     p.add_argument("--mesh", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--title", type=str, default="")
+    p.add_argument("--width", type=int, default=760)
+    p.add_argument("--height", type=int, default=680)
     args = p.parse_args()
 
-    xyz, rgb = _parse_ply(args.mesh)
-    print(f"loaded {len(xyz)} verts from {args.mesh}")
-    cols = rgb.astype(np.float32) / 255.0
+    mesh = o3d.io.read_triangle_mesh(str(args.mesh))
+    mesh.compute_vertex_normals()
+    n_v = len(mesh.vertices)
+    n_t = len(mesh.triangles)
+    print(f"loaded mesh: {n_v} verts / {n_t} tris from {args.mesh}")
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.8))
+    left = _shaded_view(mesh, args.width, args.height, use_vertex_color=True)
+    right = _shaded_view(mesh, args.width, args.height, use_vertex_color=False)
+    print("rendered both views")
+
+    gap = 8
+    banner = 34 if args.title else 0
+    canvas = np.full(
+        (args.height + banner, args.width * 2 + gap, 3), 255, dtype=np.uint8
+    )
+    canvas[banner : banner + args.height, : args.width] = left[..., :3]
+    canvas[banner : banner + args.height, args.width + gap :] = right[..., :3]
+
+    im = Image.fromarray(canvas)
+    draw = ImageDraw.Draw(im)
+    try:
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16
+        )
+        small = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13
+        )
+    except Exception:  # noqa: BLE001
+        font = ImageFont.load_default()
+        small = font
     if args.title:
-        fig.suptitle(args.title, fontsize=11)
+        draw.text((10, 8), args.title, fill=(20, 20, 20), font=font)
+    draw.text((12, banner + 8), "vertex color", fill=(30, 30, 30), font=small)
+    draw.text(
+        (args.width + gap + 12, banner + 8),
+        "geometry (uniform albedo)",
+        fill=(30, 30, 30),
+        font=small,
+    )
 
-    projections = [
-        ("top-down (xy)", "xy"),
-        ("front (xz)", "xz"),
-        ("side (yz)", "yz"),
-    ]
-    labels = {"xy": ("x (m)", "y (m)"), "xz": ("x (m)", "z (m)"), "yz": ("y (m)", "z (m)")}
-    for ax, (name, proj) in zip(axes, projections, strict=True):
-        i, j = _PROJ_INDICES[proj]
-        ax.scatter(xyz[:, i], xyz[:, j], c=cols, s=1.2, alpha=0.9, linewidths=0)
-        lo_x, hi_x = xyz[:, i].min(), xyz[:, i].max()
-        lo_y, hi_y = xyz[:, j].min(), xyz[:, j].max()
-        px = 0.05 * max(1e-3, hi_x - lo_x)
-        py = 0.05 * max(1e-3, hi_y - lo_y)
-        ax.set_xlim(lo_x - px, hi_x + px)
-        ax.set_ylim(lo_y - py, hi_y + py)
-        ax.set_aspect("equal", adjustable="box")
-        ax.set_facecolor("#111111")
-        ax.set_title(name, fontsize=9)
-        xl, yl = labels[proj]
-        ax.set_xlabel(xl, fontsize=8)
-        ax.set_ylabel(yl, fontsize=8)
-        ax.tick_params(labelsize=7)
-
-    fig.tight_layout()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.out, dpi=150, bbox_inches="tight", facecolor="white")
-    plt.close(fig)
-    print(f"wrote {args.out}")
+    im.save(args.out)
+    print(f"wrote {args.out} ({im.width}x{im.height})")
 
 
 if __name__ == "__main__":
