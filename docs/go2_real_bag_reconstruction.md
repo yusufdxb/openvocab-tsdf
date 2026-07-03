@@ -9,11 +9,15 @@ Input is a recorded Unitree GO2 ROS 2 bag; output is a colored TSDF mesh.
 
 - Source bag: `session_20260331_1957` (74 s, `/go2/camera/image_raw` rgb8,
   `/go2/camera/depth/image_raw` 32FC1 metric depth, `/tf`, `/tf_static`, `/odom`).
-- 370 frames (stride 3), 4 cm voxel, reference backend, fused in ~1.6 s on a
-  consumer NVIDIA GPU (238 FPS).
-- Mesh: **26,049 verts / 51,796 tris**, extent 5.2 x 6.75 x 1.48 m.
-- The side view resolves a floor plane and a ~1.4 m wall at correct metric
-  scale, confirming pose + depth + intrinsics are consistent.
+- 370 frames (stride 3), 4 cm voxel, reference backend, fused in 1.5 s on an
+  NVIDIA Blackwell consumer GPU (245 FPS).
+- Mesh: **26,049 verts / 51,796 tris**, extent 5.22 x 6.75 x 1.48 m.
+- The side view resolves a floor plane and a wall-like vertical structure at
+  correct metric scale, confirming pose + depth + intrinsics are consistent.
+- Re-run end to end on 2026-07-03 after rebasing this work onto current
+  `main`, to confirm the pipeline still reproduces. Numbers above are from
+  that run (a ~0.1 s / 7 FPS difference from the original run is normal
+  timing variance, not a regression).
 
 ## Honest caveats
 
