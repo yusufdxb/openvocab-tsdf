@@ -1,7 +1,7 @@
 """Side-by-side comparison figure: baseline vs treatment.
 
 Renders the same queries from two heatmap directories (typically the same
-scene with a different feature extractor — e.g. global vs sam_dense), in a
+scene with a different feature extractor - e.g. global vs sam_dense), in a
 2-row × 3-view grid per query, so the accuracy lift is visually obvious.
 
     python scripts/render_comparison.py \\
@@ -24,6 +24,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+import physx_style as _physx_style  # editorial-print theme
+_physx_style.apply()
 import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 
@@ -135,10 +137,10 @@ def main() -> None:
 
         fig, axes = plt.subplots(2, 3, figsize=(13, 8.3))
         fig.suptitle(
-            f"query: {q!r}   —   {args.baseline_label}  vs  {args.treatment_label}", fontsize=12
+            f"query: {q!r}   -   {args.baseline_label}  vs  {args.treatment_label}", fontsize=12
         )
         for col, (name, proj) in enumerate(
-            [("xy — top-down", "xy"), ("xz — front", "xz"), ("yz — side", "yz")]
+            [("xy - top-down", "xy"), ("xz - front", "xz"), ("yz - side", "yz")]
         ):
             _panel(axes[0, col], mesh_xyz, mesh_rgb, bl_xyz, bl_rgb, gt_min, gt_max, proj)
             _panel(axes[1, col], mesh_xyz, mesh_rgb, tr_xyz, tr_rgb, gt_min, gt_max, proj)
