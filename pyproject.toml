@@ -111,7 +111,7 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 
 # Pin torch / torchvision to the cu128 build by default. Rationale:
-# the project targets RTX 5070 / sm_120 (Blackwell). The PyPI default
+# the project targets Blackwell / sm_120. The PyPI default
 # `torch==2.11.0+cu130` requires NVIDIA driver >=580; the cu128 wheel
 # works on driver >=525, which covers the 570.x line that ships with
 # stock Ubuntu LTS HWE kernels. README.md documents the trade-off.

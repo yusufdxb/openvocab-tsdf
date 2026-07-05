@@ -1,9 +1,9 @@
 """Render publishable 3-view figures for the README / paper.
 
 For each query, produces one PNG with:
-  - top-down (xy) view — full mesh in light gray, heatmap overlaid, GT bbox outline
-  - side (xz) view — same
-  - perspective — same
+  - top-down (xy) view - full mesh in light gray, heatmap overlaid, GT bbox outline
+  - side (xz) view - same
+  - perspective - same
 
 Backed by matplotlib 3D so it runs headless, no OpenGL / EGL / display needed.
 
@@ -25,6 +25,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.patches as mpatches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+import physx_style as _physx_style  # editorial-print theme
+_physx_style.apply()
 import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 
@@ -125,7 +127,7 @@ def _render_one_query(
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.5))
     fig.suptitle(title, fontsize=11)
 
-    projections = [("xy — top-down", "xy"), ("xz — front", "xz"), ("yz — side", "yz")]
+    projections = [("xy - top-down", "xy"), ("xz - front", "xz"), ("yz - side", "yz")]
     labels = {"xy": ("x (m)", "y (m)"), "xz": ("x (m)", "z (m)"), "yz": ("y (m)", "z (m)")}
     for ax, (name, proj) in zip(axes, projections, strict=True):
         i, j = _PROJ_INDICES[proj]
@@ -222,7 +224,7 @@ def main() -> None:
             heat_rgb=heat_rgb,
             gt_min=gt[0] if gt else None,
             gt_max=gt[1] if gt else None,
-            title=f"{args.mesh.stem}  —  query: {q!r}",
+            title=f"{args.mesh.stem}  -  query: {q!r}",
             out_path=args.out_dir / f"{stem}.png",
         )
 

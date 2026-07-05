@@ -6,6 +6,43 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 
 > *"chair near the window"* → `(x, y, z), bbox, score, supporting frames`
 
+## Real GO2 rosbag reconstruction
+
+![GO2 real-bag reconstruction](figures/go2_real_bag_recon.png)
+
+This is the pipeline running on **real depth-camera data from a Unitree GO2**,
+not Replica or another synthetic dataset. Input: a recorded ROS 2 bag from the
+robot's onboard RGB-D camera (`/go2/camera/image_raw`,
+`/go2/camera/depth/image_raw`, `/tf`, `/odom`). Output: a colored TSDF mesh
+in metric scale.
+
+```bash
+source /opt/ros/humble/setup.bash
+python scripts/bag_to_frames.py <bag_dir> <frames_out> 3          # ROS side: bag -> RGB-D + poses
+.venv/bin/python scripts/reconstruct_from_frames.py <frames_out> go2_room_recon.ply 0.04   # TSDF fuse, project venv
+```
+
+Observed on `session_20260331_1957` (74 s bag, 370 frames at stride 3, 4 cm
+voxels, reference backend, NVIDIA Blackwell consumer GPU):
+
+- **26,049 vertices / 51,796 triangles**, fused in 1.5 s (245 FPS)
+- Extent 5.22 x 6.75 x 1.48 m, matching the room's real scale
+- The floor plane and a wall resolve at the correct metric distance, which
+  confirms pose, depth, and intrinsics are consistent with each other
+
+**Honest caveats (read before citing this):** the robot mostly rotated in
+place during this bag (base translation ~30 cm), so this is a local panoramic
+reconstruction of the surroundings, not a full-room traversal map. Vertex
+colors are washed toward gray because the scene is low-texture and the
+camera's RGB is dim, geometry is sound but the coloring is not a showcase.
+Open-vocab language grounding has not been run on this real map; the dim RGB
+means grounding quality on it is untested and an open question. Full writeup,
+reproduction steps, and the honest limitations list: `docs/go2_real_bag_reconstruction.md`.
+
+Everything else in this README below (Replica benchmarks, grounding
+accuracy tables, throughput numbers) is measured on the **synthetic /
+Replica-dataset** side of the project and is labeled as such throughout.
+
 ### Pipeline overview
 
 ```mermaid
@@ -36,14 +73,14 @@ graph TD
 ## TL;DR
 
 - **What:** offline-first GPU TSDF + per-voxel CLIP features for free-form 3D language grounding ("chair near the window" → ranked `(x, y, z)` with confidence), plus a ROS 2 wrapper.
-- **Headline result:** on Replica `room0` with SAM-dense CLIP features at 4 cm, **hit@1 = 55.6 %, hit@5 = 100.0 %** across a 9-query hand-annotated spec (post-fix gate, `benchmarks/results/20260416T150054Z_eval_grounding.json`). Triton fuse kernel hits **4423 FPS** at 320×240, 25 MB VRAM on RTX 5070.
+- **Headline result:** on Replica `room0` with SAM-dense CLIP features at 4 cm, **hit@1 = 55.6 %, hit@5 = 100.0 %** across a 9-query hand-annotated spec (post-fix gate, `benchmarks/results/20260416T150054Z_eval_grounding.json`). Triton fuse kernel hits **4423 FPS** at 320×240, 25 MB VRAM on an NVIDIA Blackwell consumer GPU.
 - **One-command demo (no dataset required):** `python scripts/demo_synthetic.py` builds a 3-primitive synthetic scene, fuses it, and runs a grounding query end-to-end.
 
 ## Status
 
 | Phase | State | Highlights |
 |---|---|---|
-| 0. Audit + architecture + scaffold | ✅ done | `docs/architecture.md`, `docs/decisions.md`, `AGENTS.md`, env via `uv` |
+| 0. Audit + architecture + scaffold | ✅ done | `docs/architecture.md`, `docs/decisions.md`, env via `uv` |
 | 1. RGB-D ingestion + reference TSDF | ✅ done | Replica loader, PyTorch dense backend (~1.5 kFPS @ 320×240), marching-cubes mesh |
 | 1b. Custom GPU TSDF kernel | ✅ done | **Triton** (sm_120-compatible), 4423 FPS @ 320×240, 25 MB VRAM, parity-tested |
 | 1c. Sparse-feature backend | ✅ done | Lazy per-voxel slot allocation → **3.08× less feature memory on Replica room0** (1070 vs 3298 MB), parity-tested, same throughput |
@@ -55,9 +92,9 @@ graph TD
 | 5b. Live RGB-D mapping | ✅ **end-to-end** | `grounding_node live_mode:=true` subscribes to color/depth/camera_info/TF, builds the feature map online. `live_rgbd_publisher` replays any `RGBDDataset` on topics for a hardware-free demo. |
 | 6. Polish + figures | ✅ done | Post-fix evidence pass (2026-04-16): grounding metrics regenerated from fresh JSONs, qualitative 3-panel figures + comparison grids re-rendered under `figures/postfix_*/`, evidence index maps every headline row to its map / JSON / figure directory. |
 
-### Current numbers (RTX 5070, 12 GB)
+### Current numbers (NVIDIA Blackwell consumer GPU)
 
-> **Post-fix evidence**, regenerated 2026-04-16 on RTX 5070 (driver
+> **Post-fix evidence**, regenerated 2026-04-16 on an NVIDIA Blackwell consumer GPU (driver
 > 570.211.01, `torch 2.11.0+cu128`) under the corrected near-surface
 > feature gate. The quoted Replica grounding numbers below come from
 > these JSONs in `benchmarks/results/`:
@@ -147,7 +184,7 @@ python scripts/render_comparison.py \
     --out-dir figures/postfix_comparison_<scene>
 ```
 
-**Headline cross-scene / cross-config table (post-fix gate, RTX 5070, 2026-04-16).** All `hit-L2` values are the hit-only mean (mean L2 over `hit@5`-positive cases), since the unconditional mean L2 is dominated by full misses.
+**Headline cross-scene / cross-config table (post-fix gate, NVIDIA Blackwell consumer GPU, 2026-04-16).** All `hit-L2` values are the hit-only mean (mean L2 over `hit@5`-positive cases), since the unconditional mean L2 is dominated by full misses.
 
 | scene   | voxel | frames | mode      | hit@1   | hit@5   | hit-L2 (m, hit-only) | source JSON |
 |---|---|---|---|---|---|---|---|
@@ -196,7 +233,7 @@ corrected on 2026-05-09 (commit `f231fc5` ports the encoder to ViT-L/16
 384 + DPT-Large reassembly + 256-channel scratch decoder, matching
 `lseg_minimal_e200.ckpt` key-for-key with 0 missing / 0 unexpected on
 strict load). The 2026-05-12 encode runs (74 s fuse for 100 frames per
-scene on RTX 5070, 12 GB) close the 17-task dense-encoder plan at 17/17.
+scene on an NVIDIA Blackwell consumer GPU) close the 17-task dense-encoder plan at 17/17.
 
 Headline takeaway: no single encoder wins both scenes. LSeg lifts
 `office0 hit@1` to **37.5 %** (the strongest hit@1 in this slice), while
@@ -233,7 +270,7 @@ Fig: `figures/postfix_room0_sam/a_sofa.png`: the top-brightness-quartile heatmap
 - **The gate fix is not uniformly positive.** `office0 / sam_dense` regressed from 75.0 % → 62.5 % hit@5; that's an honest cost of refusing to write features into free-space voxels. Where contamination happened to point at the right region by accident, removing it costs a hit. Mean centroid L2 still improved (1.54 → 1.50 m), when SAM-dense does land a hit, it lands closer.
 - **`room0` object-level stays hard.** Best `room0 hit@1` across all four modes is still 55.6 % (SAM-dense). Patch mode is the weakest configuration (`hit@1 = 11.1 %`); natural-image CLIP patch tokens are known weak for dense localization without a task-trained dense head (LSeg / OpenSeg), which is the correct next experiment.
 - **Latency: 50-233 ms per query** (room0 sam_dense: 100 ms; room0 patch: 233 ms; office0: 50 ms). Includes text encode + voxel scan + connected-component cluster. Dominated by `MapBundle.score_query`'s `(Nx, Ny, Nz)` scatter at room scale.
-- **Encode throughput (post-fix, RTX 5070):** SAM-dense 0.5-0.6 fuse-FPS (100 frames in ~170-185 s); global 130-145 fuse-FPS (500 frames in ~3 s). Numbers preserved from the 2026-04-16 rerun stdout, not from a benchmark JSON.
+- **Encode throughput (post-fix, NVIDIA Blackwell consumer GPU):** SAM-dense 0.5-0.6 fuse-FPS (100 frames in ~170-185 s); global 130-145 fuse-FPS (500 frames in ~3 s). Numbers preserved from the 2026-04-16 rerun stdout, not from a benchmark JSON.
 
 ### Replica 8-scene aggregate (4 cm `block_hash` + `sam_dense`, 2026-04-19)
 
@@ -378,12 +415,12 @@ Honest limitation: the integrate pass is now frustum-culled at the block level (
 - `grounding_node live_mode:=true` synchronizes them through `message_filters`, looks up `map→camera` through TF, runs CLIP encode + `ReferenceTSDF.integrate` per frame.
 - After 30 s integration (49 frames at stride=2), `ros2 service call /openvocab/ground "{query: 'a chair', top_percentile: 0.02}"` returns 3 ranked targets in well under a second. End-to-end hardware-free robotic demo.
 
-See [`docs/architecture.md`](docs/architecture.md) for the full plan, performance targets, and what is explicitly cut. See [`docs/decisions.md`](docs/decisions.md) for the architectural-decision log. See [`AGENTS.md`](AGENTS.md) for the rules that govern agent work in this repository.
+See [`docs/architecture.md`](docs/architecture.md) for the full plan, performance targets, and what is explicitly cut. See [`docs/decisions.md`](docs/decisions.md) for the architectural-decision log.
 
 ### Reproducing the post-fix Replica numbers
 
 Environment used for the 2026-04-16 regeneration:
-- GPU: NVIDIA GeForce RTX 5070 (sm_120 / Blackwell), 12 GB
+- GPU: NVIDIA Blackwell consumer GPU (sm_120)
 - Driver: `570.211.01` (CUDA 12.8 runtime line)
 - PyTorch: `2.11.0+cu128` (NOT the default `+cu130` wheel, see "Driver / torch matrix" below)
 - OpenCLIP `ViT-B-16 / laion2b_s34b_b88k`, fp16
@@ -446,9 +483,9 @@ The sibling [`go2-semantic-nav`](../go2-semantic-nav) project owns the Jetson / 
 ## Hardware expectations
 
 - Linux, x86_64
-- NVIDIA GPU, compute capability ≥ 7.5 (developed on RTX 5070, sm_120)
+- NVIDIA GPU, compute capability ≥ 7.5 (developed on an NVIDIA Blackwell consumer GPU, sm_120)
 - CUDA 12.x runtime (via PyTorch) plus a matching toolkit if you build the CUDA extension
-- 12+ GB VRAM comfortable; 8 GB works with smaller voxel volumes and fp16
+- 8+ GB VRAM works comfortably; less works with smaller voxel volumes and fp16
 
 ## Quick start
 
@@ -493,7 +530,6 @@ The ROS 2 node exposing `/openvocab/ground` as a service lives at `ros2_ws/`: se
 
 ```
 openvocab-tsdf/
-├── AGENTS.md                 # rules for any LLM-driven contributor
 ├── README.md
 ├── pyproject.toml
 ├── Makefile
@@ -519,7 +555,7 @@ openvocab-tsdf/
 
 ## Performance budgets (contracts)
 
-See [`docs/architecture.md`](docs/architecture.md#performance-targets-desktop-rtx-5070-12gb). Breaking a budget requires an entry in [`docs/decisions.md`](docs/decisions.md).
+See [`docs/architecture.md`](docs/architecture.md#performance-targets-desktop-nvidia-blackwell-consumer-gpu). Breaking a budget requires an entry in [`docs/decisions.md`](docs/decisions.md).
 
 ## License
 

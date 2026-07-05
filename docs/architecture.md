@@ -99,7 +99,7 @@ Single node `openvocab_tsdf_node` (with `openvocab_tsdf_msgs` for the service ty
 | Profiling | Nsight Systems, PyTorch profiler | Timeline traces, cross-checked |
 | ROS 2 | Humble (foxy is EOL) | Matches sibling projects on this machine |
 
-## Performance Targets (desktop, RTX 5070 12GB)
+## Performance Targets (desktop, NVIDIA Blackwell consumer GPU)
 
 These are contracts. Breaking one requires a `docs/decisions.md` entry.
 
@@ -109,7 +109,7 @@ These are contracts. Breaking one requires a `docs/decisions.md` entry.
 | CLIP ViT-B/16 image encode | ≥ 30 FPS @ 224×224 fp16 | Batched across frames |
 | Voxel map size | ≥ 10 m³ @ 2 cm voxels | Active voxel count bounded by hash capacity |
 | Text query latency | ≤ 200 ms end-to-end | Text encode + full voxel scan |
-| Peak VRAM | ≤ 8 GB | Leaves headroom on 12 GB card |
+| Peak VRAM | ≤ 8 GB | Leaves VRAM headroom on a consumer GPU |
 | Offline eval wall time | ≤ 15 min / ScanNet scene | 500-frame scene, default config |
 
 ## What We Cut and Why
@@ -143,8 +143,8 @@ These are contracts. Breaking one requires a `docs/decisions.md` entry.
 
 | Risk | Mitigation |
 |---|---|
-| RTX 5070 sm_120 toolchain gaps (TensorRT, some CUDA libs) | Fall back to PyTorch compile / ONNX Runtime; defer TensorRT to Phase 4 after the perf bar is otherwise met |
+| Blackwell sm_120 toolchain gaps (TensorRT, some CUDA libs) | Fall back to PyTorch compile / ONNX Runtime; defer TensorRT to Phase 4 after the perf bar is otherwise met |
 | Hash collisions / capacity overflow in sparse voxel map | Bounded capacity with observable resize; unit tests that exercise collision paths |
 | CLIP global features too coarse for localized queries | Patch/region mode is already planned as Phase 2b |
-| 12 GB VRAM pressure with ViT-L + large maps | fp16 everywhere, chunked batch encode, enforced map-size caps with clear errors |
+| VRAM pressure with ViT-L + large maps | fp16 everywhere, chunked batch encode, enforced map-size caps with clear errors |
 | Pose-quality dependency | Start with datasets with ground-truth poses; never promise SLAM |

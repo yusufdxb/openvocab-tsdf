@@ -3,7 +3,7 @@
   "backend": "reference",
   "timestamp": "2026-04-13T02:55:41+00:00",
   "hardware": {
-    "gpu": "NVIDIA GeForce RTX 5070",
+    "gpu": "NVIDIA Blackwell consumer GPU",
     "vram_gb": 11.48,
     "host": "mewtwo"
   },

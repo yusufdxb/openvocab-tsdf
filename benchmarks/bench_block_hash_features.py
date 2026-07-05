@@ -3,7 +3,7 @@
 Demonstrates that `BlockHashTSDF(store_features=True)` — block-hash sparse
 geometry composed with per-voxel sparse features — runs end-to-end at
 warehouse scale (30 m³ cube) with per-voxel 512-d CLIP features on a
-12 GB card.
+consumer GPU.
 
     python benchmarks/bench_block_hash_features.py --side-m 30 --voxel 0.04
 """

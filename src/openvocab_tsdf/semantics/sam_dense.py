@@ -11,7 +11,7 @@ This is the "LSeg-alternative" path: dense, task-informed features produced by
 a strong off-the-shelf segmenter (MobileSAM) + CLIP, without training our own
 dense head.
 
-Cost model (RTX 5070, per frame):
+Cost model (NVIDIA Blackwell consumer GPU, per frame):
   - MobileSAM auto-mask: ~70–150 ms (tiny ViT-T backbone, 40 MB)
   - CLIP on ~30 masks, batched: ~40 ms
   - Total: ~100–200 ms/frame — 5–10× slower than global CLIP alone.

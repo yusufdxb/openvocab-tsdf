@@ -20,7 +20,7 @@ You may need to adjust the torch install depending on your GPU:
 
 | GPU | Recommended |
 |---|---|
-| RTX 5070 / Blackwell | PyTorch nightly built against CUDA 12.8 (`+cu128`), needed for `sm_120` |
+| NVIDIA Blackwell (sm_120) | PyTorch nightly built against CUDA 12.8 (`+cu128`), needed for `sm_120` |
 | RTX 40-series / 30-series | PyTorch 2.6+ stable with CUDA 12.x |
 | No GPU | Reference backend runs on CPU; Triton backend does not |
 

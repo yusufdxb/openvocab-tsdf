@@ -44,9 +44,9 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ## 2026-04-12: Python 3.10 + uv, PyTorch 2.11 + CUDA 12.8
 
-**Decision.** Environment management via `uv`. Python 3.10 (system default; reproducible across mewtwo and CI). PyTorch 2.11.0+cu128 (already installed, works on RTX 5070 sm_120).
+**Decision.** Environment management via `uv`. Python 3.10 (system default; reproducible across mewtwo and CI). PyTorch 2.11.0+cu128 (already installed, works on Blackwell sm_120).
 
-**Rationale.** RTX 5070 is Blackwell sm_120, many libraries do not yet ship wheels for it. The installed PyTorch build works; changing Python or CUDA versions risks losing that. `uv` is faster and less surprising than conda or poetry for a pure-Python project that shells out to a CMake-built CUDA extension.
+**Rationale.** The target GPU is Blackwell sm_120, many libraries do not yet ship wheels for it. The installed PyTorch build works; changing Python or CUDA versions risks losing that. `uv` is faster and less surprising than conda or poetry for a pure-Python project that shells out to a CMake-built CUDA extension.
 
 **Alternatives considered.** conda (slower, heavier), poetry (slower resolver), system pip (less reproducible).
 
@@ -56,7 +56,7 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 **Decision.** Add a TensorRT-backed image encoder that serves the same (N, D) L2-normalized embeddings as the PyTorch reference. ONNX is exported from the OpenCLIP visual tower with the legacy tracing exporter (static batch), and a TRT fp16 engine is built on first call. The PyTorch encoder remains the reference.
 
-**Measured perf.** On RTX 5070 (12 GB), batch 16, 224×224, random inputs:
+**Measured perf.** On an NVIDIA Blackwell consumer GPU, batch 16, 224×224, random inputs:
 - PyTorch fp16: 1280 FPS
 - TensorRT fp16: 1414 FPS (+10 %)
 - Parity: cosine similarity vs PyTorch > 0.98 on 8 fixed inputs.
@@ -112,7 +112,7 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 **Decision.** The first fast mapping backend is written in **Triton**, not hand-written CUDA+CMake. Native CUDA is deferred to Phase 4 (optional) when we either (a) install CUDA 12.8 toolkit or (b) justify the additional complexity with a measurable gap Triton cannot close.
 
-**Rationale.** The system nvcc is 11.5 and cannot target the RTX 5070's Blackwell `sm_120` compute capability, native CUDA builds would require a toolkit install. Triton 3.6 ships with PyTorch 2.11 and already supports `sm_120` via the bundled build, so the kernel path works today with no system changes. Triton is also the idiomatic choice for new GPU work at this scale in 2025/2026; hand-written `.cu` is still valuable but is a second-order optimization unless Triton blocks us.
+**Rationale.** The system nvcc is 11.5 and cannot target the Blackwell `sm_120` compute capability, native CUDA builds would require a toolkit install. Triton 3.6 ships with PyTorch 2.11 and already supports `sm_120` via the bundled build, so the kernel path works today with no system changes. Triton is also the idiomatic choice for new GPU work at this scale in 2025/2026; hand-written `.cu` is still valuable but is a second-order optimization unless Triton blocks us.
 
 **What this does NOT change.**
 - The reference PyTorch implementation remains the correctness oracle.
@@ -154,7 +154,7 @@ The old `sparse: bool` key stays alongside for back-compat with maps saved befor
 
 **Decision.** `BlockHashTSDF.integrate`'s per-voxel feature update processes `idx_flat` in `CHUNK = 32_768`-sized slices instead of all at once.
 
-**Observed incident.** At 4 cm voxels with `sam_dense` features on the 100-frame Replica room0 sweep, the single-shot path `(f_old * w + feat) / (w + 1)` allocated ≈ 3 × (N, 512) fp32 temporaries where N ≈ 465 k near-surface voxels in some frames, ~2.8 GiB of intermediates. OOM'd at frame 25/100 on a 12 GB card.
+**Observed incident.** At 4 cm voxels with `sam_dense` features on the 100-frame Replica room0 sweep, the single-shot path `(f_old * w + feat) / (w + 1)` allocated ≈ 3 × (N, 512) fp32 temporaries where N ≈ 465 k near-surface voxels in some frames, ~2.8 GiB of intermediates. OOM'd at frame 25/100 on the target consumer GPU.
 
 **Fix.** Slice the merge into CHUNK rows at a time after feature-slot allocation. Peak per-chunk alloc is ~200 MiB, well below the pool's steady-state footprint. No behavioural change: `index_copy_` is an in-place write per slice, and every slice touches a disjoint set of pool rows because `fslot_long` is per-voxel (no aliasing across chunks).
 
@@ -170,7 +170,7 @@ The old `sparse: bool` key stays alongside for back-compat with maps saved befor
 
 fp32 eliminates that: TRT fp32 vs PyTorch fp32 on the same real frame through the same pipeline gives mean cosine 0.9995 (end-to-end dense feature map, not just encoder output). Grounding matches PyTorch within the ±1 pp budget. Cost is that the fp16 speedup (2.74×) collapses to ~10 %; fp32 is what makes the TRT path correctness-preserving.
 
-**Measured perf.** RTX 5070 (12 GB), static batch 1, 1024×1024 input (the only size MobileSAM's TinyViT accepts, positional-embedding shapes are baked in):
+**Measured perf.** NVIDIA Blackwell consumer GPU, static batch 1, 1024×1024 input (the only size MobileSAM's TinyViT accepts, positional-embedding shapes are baked in):
 
 | path | PyTorch fp32 | TRT fp32 (default) | TRT fp16 (opt-in) |
 |---|---|---|---|
@@ -331,7 +331,7 @@ semantics improvements separately.
 
 **Rationale.** The 8-scene Replica aggregate hit@1 is 15.3%, the feature stack is the ceiling, not the backend. ViT-L/14 is a stronger encoder that may improve grounding accuracy with no pipeline code changes.
 
-**VRAM.** ViT-L/14 is ~1.5 GB vs ViT-B/16's ~0.5 GB. With MobileSAM (~150 MB) and a 4 cm block_hash volume (~1.8 GB), total is ~3.5 GB. Fits in 12 GB.
+**VRAM.** ViT-L/14 is ~1.5 GB vs ViT-B/16's ~0.5 GB. With MobileSAM (~150 MB) and a 4 cm block_hash volume (~1.8 GB), total is ~3.5 GB. Fits comfortably in consumer-GPU VRAM.
 
 **Status.** Configs landed (`configs/replica_room0_4cm_block_hash_sam_vitl14.yaml`, `configs/replica_office0_4cm_block_hash_sam_vitl14.yaml`). End-to-end encode+eval deferred, needs ~1.5 GB ViT-L/14 download and a fresh MobileSAM run.
 
@@ -369,7 +369,7 @@ two LSeg encode + eval runs (Task 11) landed on 2026-05-12.
 **Evidence.**
 
 - `outputs/replica_room0_6cm_lseg.npz` (267 MB, 1423 blocks / 137 486 feat voxels),
-  fuse 74.24 s for 100 frames on RTX 5070.
+  fuse 74.24 s for 100 frames on an NVIDIA Blackwell consumer GPU.
 - `outputs/replica_office0_6cm_lseg.npz` (159 MB, 718 blocks / 81 973 feat voxels),
   fuse 74.93 s for 100 frames.
 - LSeg grounding eval room0: hit@1 = 11.1 %, hit@5 = 44.4 %, source
@@ -385,7 +385,7 @@ read that the feature stack is the ceiling on Replica.
 
 **Method caveats.** LSeg uses 6 cm voxels vs 4 cm for the SAM-dense
 configs (matching the original LSeg config and to keep VRAM headroom on
-the 12 GB RTX 5070 alongside the 3.1 GB checkpoint at ~342 M params).
+an NVIDIA Blackwell consumer GPU alongside the 3.1 GB checkpoint at ~342 M params).
 The hit@5 gap between LSeg and SAM-dense is partly attributable to the
 coarser voxel grid. Eval used CLIP ViT-B/32 / openai for the text
 encoder (matching the LSeg training text space); a temporary spec file
