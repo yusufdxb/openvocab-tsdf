@@ -159,29 +159,12 @@ See `eval/specs/replica_room0.yaml` and `eval/specs/replica_office0.yaml` for th
 
 **Figures are evidence-consistent with the tables above**: the same `outputs/postfix_*.npz` maps feed both. The legacy pre-fix figure directories (`figures/room0/`, `figures/office0/`, `figures/room0_sam/`, `figures/comparison_room0/`) are retained for historical comparison only, any claim in this README points at `figures/postfix_*/`.
 
-Regenerate:
+Regenerate the underlying heatmap PLYs from a post-fix map (one per query):
 
 ```bash
-# 1. heatmap PLYs from a post-fix map (one per query)
 python scripts/export_heatmaps.py --map outputs/postfix_<cfg>.npz \
     --query "a sofa" --query "the floor" ... \
     --out-dir outputs/heatmaps_postfix_<cfg>
-
-# 2. 3-panel PNGs from the heatmap dir + spec
-python scripts/render_figures.py \
-    --mesh outputs/replica_<scene>_mesh.ply \
-    --heatmap-dir outputs/heatmaps_postfix_<cfg> \
-    --spec eval/specs/replica_<scene>.yaml \
-    --out-dir figures/postfix_<cfg>
-
-# 3. (optional) baseline-vs-treatment comparison grid
-python scripts/render_comparison.py \
-    --mesh outputs/replica_<scene>_mesh.ply \
-    --baseline-dir outputs/heatmaps_postfix_<scene>_global \
-    --treatment-dir outputs/heatmaps_postfix_<scene>_sam \
-    --spec eval/specs/replica_<scene>.yaml \
-    --queries "a sofa" "a chair" \
-    --out-dir figures/postfix_comparison_<scene>
 ```
 
 **Headline cross-scene / cross-config table (post-fix gate, NVIDIA Blackwell consumer GPU, 2026-04-16).** All `hit-L2` values are the hit-only mean (mean L2 over `hit@5`-positive cases), since the unconditional mean L2 is dominated by full misses.
