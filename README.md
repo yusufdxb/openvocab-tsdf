@@ -80,17 +80,17 @@ graph TD
 
 | Phase | State | Highlights |
 |---|---|---|
-| 0. Audit + architecture + scaffold | ✅ done | `docs/architecture.md`, `docs/decisions.md`, env via `uv` |
-| 1. RGB-D ingestion + reference TSDF | ✅ done | Replica loader, PyTorch dense backend (~1.5 kFPS @ 320×240), marching-cubes mesh |
-| 1b. Custom GPU TSDF kernel | ✅ done | **Triton** (sm_120-compatible), 4423 FPS @ 320×240, 25 MB VRAM, parity-tested |
-| 1c. Sparse-feature backend | ✅ done | Lazy per-voxel slot allocation → **3.08× less feature memory on Replica room0** (1070 vs 3298 MB), parity-tested, same throughput |
-| 2. OpenCLIP features + 3D aggregation | ✅ done | ViT-B/16 per-frame global embedding → per-voxel weighted mean. End-to-end grounding pipeline works. |
-| 2b. Patch / dense features | ✅ done | ViT patch tokens with the **MaskCLIP** last-block-attn-bypass, lifted into 3D with per-voxel patch lookup and a near-surface feature gate. |
-| 3. Query engine + eval harness | ✅ done | Cosine-sim, connected-component cluster, YAML-driven eval producing JSON. Surface-only filter on queries. |
-| 4. Optimization | 🟡 partial | Triton already ≥ 100× the 30-FPS fuse budget; TensorRT for CLIP is next |
-| 5. ROS 2 interface | ✅ **built & smoke-tested** | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` colcon-built, service `/openvocab/ground` returns ranked targets over DDS. |
-| 5b. Live RGB-D mapping | ✅ **end-to-end** | `grounding_node live_mode:=true` subscribes to color/depth/camera_info/TF, builds the feature map online. `live_rgbd_publisher` replays any `RGBDDataset` on topics for a hardware-free demo. |
-| 6. Polish + figures | ✅ done | Post-fix evidence pass (2026-04-16): grounding metrics regenerated from fresh JSONs, qualitative 3-panel figures + comparison grids re-rendered under `figures/postfix_*/`, evidence index maps every headline row to its map / JSON / figure directory. |
+| 0. Audit + architecture + scaffold | done | `docs/architecture.md`, `docs/decisions.md`, env via `uv` |
+| 1. RGB-D ingestion + reference TSDF | done | Replica loader, PyTorch dense backend (~1.5 kFPS @ 320×240), marching-cubes mesh |
+| 1b. Custom GPU TSDF kernel | done | **Triton** (sm_120-compatible), 4423 FPS @ 320×240, 25 MB VRAM, parity-tested |
+| 1c. Sparse-feature backend | done | Lazy per-voxel slot allocation → **3.08× less feature memory on Replica room0** (1070 vs 3298 MB), parity-tested, same throughput |
+| 2. OpenCLIP features + 3D aggregation | done | ViT-B/16 per-frame global embedding → per-voxel weighted mean. End-to-end grounding pipeline works. |
+| 2b. Patch / dense features | done | ViT patch tokens with the **MaskCLIP** last-block-attn-bypass, lifted into 3D with per-voxel patch lookup and a near-surface feature gate. |
+| 3. Query engine + eval harness | done | Cosine-sim, connected-component cluster, YAML-driven eval producing JSON. Surface-only filter on queries. |
+| 4. Optimization | partial | Triton already ≥ 100× the 30-FPS fuse budget; TensorRT for CLIP is next |
+| 5. ROS 2 interface | **built & smoke-tested** | `openvocab_tsdf_msgs` + `openvocab_tsdf_node` colcon-built, service `/openvocab/ground` returns ranked targets over DDS. |
+| 5b. Live RGB-D mapping | **end-to-end** | `grounding_node live_mode:=true` subscribes to color/depth/camera_info/TF, builds the feature map online. `live_rgbd_publisher` replays any `RGBDDataset` on topics for a hardware-free demo. |
+| 6. Polish + figures | done | Post-fix evidence pass (2026-04-16): grounding metrics regenerated from fresh JSONs, qualitative 3-panel figures + comparison grids re-rendered under `figures/postfix_*/`, evidence index maps every headline row to its map / JSON / figure directory. |
 
 ### Current numbers (NVIDIA Blackwell consumer GPU)
 
