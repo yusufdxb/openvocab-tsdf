@@ -13,7 +13,7 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-Verified on mewtwo: `ros2 humble`, `colcon 0.5+`. Both packages build clean in ~3s.
+Verified on the dev workstation: `ros2 humble`, `colcon 0.5+`. Both packages build clean in ~3s.
 
 ## Run
 

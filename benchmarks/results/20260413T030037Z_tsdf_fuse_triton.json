@@ -4,8 +4,8 @@
   "timestamp": "2026-04-13T03:00:37+00:00",
   "hardware": {
     "gpu": "NVIDIA Blackwell consumer GPU",
-    "vram_gb": 11.48,
-    "host": "mewtwo"
+    "vram_gb": null,
+    "host": "dev-workstation"
   },
   "params": {
     "frames": 64,

@@ -44,7 +44,7 @@ Append-only log. Each entry: date, decision, rationale, alternatives considered,
 
 ## 2026-04-12: Python 3.10 + uv, PyTorch 2.11 + CUDA 12.8
 
-**Decision.** Environment management via `uv`. Python 3.10 (system default; reproducible across mewtwo and CI). PyTorch 2.11.0+cu128 (already installed, works on Blackwell sm_120).
+**Decision.** Environment management via `uv`. Python 3.10 (system default; reproducible across the dev workstation and CI). PyTorch 2.11.0+cu128 (already installed, works on Blackwell sm_120).
 
 **Rationale.** The target GPU is Blackwell sm_120, many libraries do not yet ship wheels for it. The installed PyTorch build works; changing Python or CUDA versions risks losing that. `uv` is faster and less surprising than conda or poetry for a pure-Python project that shells out to a CMake-built CUDA extension.
 

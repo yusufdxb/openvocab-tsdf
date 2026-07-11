@@ -4,7 +4,7 @@ Same storage layout and public interface as `ReferenceTSDF`. Uses a single
 1D Triton kernel that assigns one voxel per thread so no atomics are needed
 and all writes are coalesced.
 
-Why Triton and not hand-written CUDA yet: the system nvcc on mewtwo is 11.5
+Why Triton and not hand-written CUDA yet: the system nvcc on the dev workstation is 11.5
 and cannot target the Blackwell sm_120 compute capability. Triton 3.6 ships
 with PyTorch 2.11 and supports sm_120 via the bundled build, so we get a real
 GPU kernel today with no toolchain install. See docs/decisions.md.

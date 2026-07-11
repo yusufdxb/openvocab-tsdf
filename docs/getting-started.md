@@ -9,7 +9,7 @@ Short, practical path from a clean clone to a working grounding demo.
 make sync
 ```
 
-This creates `.venv/` inheriting system site-packages (so the system PyTorch on mewtwo is reused and we don't re-download a 2 GB torch wheel). On a fresh machine, replace with:
+This creates `.venv/` inheriting system site-packages (so the system PyTorch on the dev workstation is reused and we don't re-download a 2 GB torch wheel). On a fresh machine, replace with:
 
 ```bash
 uv venv .venv --python 3.10
