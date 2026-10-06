@@ -1,13 +1,21 @@
-# Real GO2 rosbag reconstruction
+# GO2 sim rosbag reconstruction
 
-First reconstruction from **real robot data** rather than Replica/ScanNet/synthetic.
-Input is a recorded Unitree GO2 ROS 2 bag; output is a colored TSDF mesh.
+Reconstruction from a **Gazebo-simulated GO2 rosbag** (sim RGB-D plus odom/TF),
+which exercises the ROS-bag ingestion path end to end. It is **not real-robot
+data**, and no real-robot reconstruction exists yet: the real GO2 has an
+RGB-only front camera, so a real run needs LiDAR-projected depth.
+Output is a colored TSDF mesh.
 
-![GO2 real-bag reconstruction](../figures/go2_real_bag_recon.png)
+> Correction (2026-10-05): an earlier version of this page described this bag
+> as real robot data. It is a Gazebo simulation recording (its metadata has a
+> `/clock` topic with the same message count as `/odom`, and a registered
+> 32FC1 depth image that the real GO2 camera does not provide).
+
+![GO2 sim-bag reconstruction](../figures/go2_sim_bag_recon.png)
 
 ## Result
 
-- Source bag: `session_20260331_1957` (74 s, `/go2/camera/image_raw` rgb8,
+- Source bag: `session_20260331_1957` (Gazebo sim, 74 s, `/go2/camera/image_raw` rgb8,
   `/go2/camera/depth/image_raw` 32FC1 metric depth, `/tf`, `/tf_static`, `/odom`).
 - 370 frames (stride 3), 4 cm voxel, reference backend, fused in 1.5 s on an
   NVIDIA Blackwell consumer GPU (245 FPS).
@@ -26,7 +34,7 @@ Input is a recorded Unitree GO2 ROS 2 bag; output is a colored TSDF mesh.
 - Vertex colors are washed toward gray: the indoor scene is low-texture and the
   camera RGB is dim. Geometry is sound; appearance is not a showcase.
 - Depth beyond 8 m is dropped as spurious far returns.
-- Nothing is injected or synthetic here: every pixel and pose is real hardware.
+- All pixels, depth, and poses come from the Gazebo simulation, not hardware.
 
 ## Reproduce
 
@@ -48,7 +56,9 @@ depth is already registered to the color optical frame, so no alignment step.
 
 ## Next
 
-- Open-vocab grounding (SAM-dense CLIP) on this real map is untested; the RGB is
-  dim, so grounding quality is an open question.
-- A traversal bag (real base motion) would give a proper map rather than a
+- Open-vocab grounding (SAM-dense CLIP) on this sim map is untested; grounding quality is an
+  open question.
+- A traversal bag (more base motion) would give a proper map rather than a
   rotation panorama.
+- A real-robot run is still owed: it needs LiDAR-projected depth because the
+  real GO2 camera is RGB-only.

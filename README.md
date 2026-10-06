@@ -6,15 +6,17 @@ Ingest RGB-D and poses → fuse a GPU TSDF / sparse voxel map → attach open-vo
 
 > *"chair near the window"* → `(x, y, z), bbox, score, supporting frames`
 
-## Real GO2 rosbag reconstruction
+## GO2 sim rosbag reconstruction
 
-![GO2 real-bag reconstruction](figures/go2_real_bag_recon.png)
+![GO2 sim-bag reconstruction](figures/go2_sim_bag_recon.png)
 
-This is the pipeline running on **real depth-camera data from a Unitree GO2**,
-not Replica or another synthetic dataset. Input: a recorded ROS 2 bag from the
-robot's onboard RGB-D camera (`/go2/camera/image_raw`,
-`/go2/camera/depth/image_raw`, `/tf`, `/odom`). Output: a colored TSDF mesh
-in metric scale.
+This is a reconstruction from a **Gazebo-simulated GO2 rosbag** (simulated
+RGB-D camera plus odom/TF), not Replica or ScanNet. It exercises the ROS-bag
+ingestion path end to end. It is **not real-robot data**, and no real-robot
+reconstruction exists yet: the real GO2 has an RGB-only front camera, so a real
+run needs LiDAR-projected depth. Input: a recorded ROS 2 bag
+(`/go2/camera/image_raw`, `/go2/camera/depth/image_raw`, `/tf`, `/odom`).
+Output: a colored TSDF mesh in metric scale.
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -26,7 +28,7 @@ Observed on `session_20260331_1957` (74 s bag, 370 frames at stride 3, 4 cm
 voxels, reference backend, NVIDIA Blackwell consumer GPU):
 
 - **26,049 vertices / 51,796 triangles**, fused in 1.5 s (245 FPS)
-- Extent 5.22 x 6.75 x 1.48 m, matching the room's real scale
+- Extent 5.22 x 6.75 x 1.48 m, matching the simulated room's scale
 - The floor plane and a wall resolve at the correct metric distance, which
   confirms pose, depth, and intrinsics are consistent with each other
 
@@ -35,9 +37,9 @@ place during this bag (base translation ~30 cm), so this is a local panoramic
 reconstruction of the surroundings, not a full-room traversal map. Vertex
 colors are washed toward gray because the scene is low-texture and the
 camera's RGB is dim, geometry is sound but the coloring is not a showcase.
-Open-vocab language grounding has not been run on this real map; the dim RGB
-means grounding quality on it is untested and an open question. Full writeup,
-reproduction steps, and the honest limitations list: `docs/go2_real_bag_reconstruction.md`.
+Open-vocab language grounding has not been run on this sim map; grounding
+quality on it is untested and an open question. Full writeup,
+reproduction steps, and the honest limitations list: `docs/go2_sim_bag_reconstruction.md`.
 
 Everything else in this README below (Replica benchmarks, grounding
 accuracy tables, throughput numbers) is measured on the **synthetic /
